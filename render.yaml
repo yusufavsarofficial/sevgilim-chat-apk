@@ -26,4 +26,4 @@ services:
       - key: PORT
         value: 3000
       - key: CORS_ORIGIN
-        value: https://puantaj-maas-api.onrender.com,http://localhost:8081,http://localhost:19006
+        value: https://sevgilim-chat.onrender.com,http://localhost:8081,http://localhost:19006
