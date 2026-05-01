@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppData, AuthUser } from "./types";
 
-const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://puantaj-maas-api.onrender.com").replace(/\/$/, "");
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://sevgilim-chat.onrender.com").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "@puantaj-maas-apk:remote:access";
 const REFRESH_TOKEN_KEY = "@puantaj-maas-apk:remote:refresh";
 

@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureAdminUser } from "./bootstrap.js";
 import { config } from "./config.js";
+import { query } from "./db.js";
 import { requireAdmin, requireAuth } from "./middleware/auth.js";
 import { errorHandler, notFoundHandler } from "./middleware/errors.js";
 import { requestMetaMiddleware } from "./middleware/requestMeta.js";
@@ -59,6 +60,15 @@ app.use("/api/auth", authRouter);
 app.use("/api/payroll", requireAuth, payrollRouter);
 app.use("/api/security", requireAuth, securityRouter);
 app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
+
+app.get("/health", async (_req, res) => {
+  try {
+    await query("SELECT 1");
+    res.json({ ok: true, service: "puantaj-maas-backend" });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: puantaj-maas-api
+    name: sevgilim-chat
     runtime: node
     rootDir: backend
     buildCommand: npm install && npm run build
@@ -26,4 +26,4 @@ services:
       - key: PORT
         value: 3000
       - key: CORS_ORIGIN
-        value: https://puantaj-maas-api.onrender.com,http://localhost:8081
+        value: https://sevgilim-chat.onrender.com,http://localhost:8081
