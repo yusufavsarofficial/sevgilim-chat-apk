@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Puantaj Maaş Hesap",
+    "slug": "puantaj-maas-apk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b1220"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Puantaj uygulaması konumunu giriş-çıkış kaydı için kullanır."
+        }
+      ]
+    ],
+    "androidPermissions": [
+      "ACCESS_FINE_LOCATION",
+      "ACCESS_COARSE_LOCATION"
+    ],
+    "android": {
+      "package": "com.yusuf.puantajmaashesap",
+      "versionCode": 2,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f766e"
+      }
+    },
+    "owner": "yusufav",
+    "extra": {
+      "apiBaseUrl": "https://puantaj-maas-api.onrender.com",
+      "eas": {
+        "projectId": "f4d47031-ec50-440b-ae8b-5e00fca98945"
+      }
+    }
+  }
+}

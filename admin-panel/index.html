@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puantaj Maaş Admin CPanel</title>
+  <link rel="stylesheet" href="/admin/style.css" />
+</head>
+<body>
+  <main class="layout">
+    <section id="loginCard" class="card login-card">
+      <h1>Yönetim Paneli</h1>
+      <p class="muted">Sadece admin kullanıcıları erişebilir.</p>
+      <label>Kullanıcı adı</label>
+      <input id="username" autocomplete="username" />
+      <label>Şifre</label>
+      <input id="password" type="password" autocomplete="current-password" />
+      <button id="loginBtn">Admin Giriş</button>
+      <p id="loginStatus" class="status"></p>
+    </section>
+
+    <section id="panel" class="hidden">
+      <header class="panel-header card">
+        <div>
+          <h2>Admin Dashboard</h2>
+          <p id="adminIdentity" class="muted"></p>
+        </div>
+        <button id="logoutBtn" class="danger">Çıkış</button>
+      </header>
+
+      <section class="stats-grid">
+        <article class="card stat-card">
+          <h3>Toplam Kullanıcı</h3>
+          <p id="statTotal" class="stat">0</p>
+        </article>
+        <article class="card stat-card">
+          <h3>Aktif Kullanıcı</h3>
+          <p id="statActive" class="stat">0</p>
+        </article>
+        <article class="card stat-card">
+          <h3>Banlı Kullanıcı</h3>
+          <p id="statBanned" class="stat">0</p>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="toolbar">
+          <h3>Kullanıcılar</h3>
+          <div class="toolbar-right">
+            <input id="searchInput" placeholder="Kullanıcı ara" />
+            <button id="searchBtn">Ara</button>
+            <button id="refreshUsersBtn">Yenile</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Kullanıcı</th>
+                <th>Rol</th>
+                <th>Durum</th>
+                <th>Son Giriş</th>
+                <th>IP</th>
+                <th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card split-card">
+        <div>
+          <h3>Son Giriş Yapanlar</h3>
+          <ul id="recentLogins" class="list"></ul>
+        </div>
+        <div>
+          <h3>IP Ban Yönetimi</h3>
+          <label>IP Adresi</label>
+          <input id="ipBanInput" placeholder="1.2.3.4" />
+          <label>Sebep</label>
+          <input id="ipBanReasonInput" placeholder="Opsiyonel" />
+          <button id="addIpBanBtn">IP Ban Ekle</button>
+          <ul id="ipBanList" class="list"></ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="toolbar">
+          <h3>Audit Log</h3>
+          <button id="refreshLogsBtn">Yenile</button>
+        </div>
+        <ul id="auditList" class="list"></ul>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="userDialog">
+    <h3>Kullanıcı Detayı</h3>
+    <div id="userDetail"></div>
+    <div class="dialog-actions">
+      <button id="banBtn">Banla</button>
+      <button id="unbanBtn">Ban Kaldır</button>
+      <button id="disableBtn">Pasif Yap</button>
+      <button id="enableBtn">Aktif Yap</button>
+      <button id="revokeBtn">Oturumları Sonlandır</button>
+      <button id="deleteDataBtn" class="danger">Verileri Sil</button>
+      <button id="closeDialogBtn" class="secondary">Kapat</button>
+    </div>
+  </dialog>
+
+  <script src="/admin/app.js" defer></script>
+</body>
+</html>

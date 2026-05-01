@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: puantaj-maas-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_EXPIRES_IN
+        value: 30d
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: REGISTER_INVITE_KEY
+        sync: false
+      - key: PORT
+        value: 3000
+      - key: CORS_ORIGIN
+        value: https://puantaj-maas-api.onrender.com,http://localhost:8081

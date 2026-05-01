@@ -1,0 +1,30 @@
+{
+  "name": "puantaj-maas-apk",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build:android:apk": "eas build -p android --profile preview"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~55.0.2",
+    "expo-crypto": "~55.0.14",
+    "expo-device": "^55.0.15",
+    "expo-file-system": "~55.0.17",
+    "expo-location": "~55.1.8",
+    "expo-sharing": "~55.0.18",
+    "expo-status-bar": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.6"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "eas-cli": "^18.9.1",
+    "typescript": "~5.9.2"
+  }
+}
