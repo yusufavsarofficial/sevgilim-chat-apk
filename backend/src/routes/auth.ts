@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+﻿import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
@@ -9,18 +9,22 @@ import { createAuditLog } from "../utils/audit.js";
 import { hashToken, normalizeUsername, parseDurationToMs } from "../utils/security.js";
 import { signAccessToken, signRefreshToken, verifyJwt } from "../utils/tokens.js";
 
+const consentSchema = z.object({
+  kvkk: z.boolean(),
+  acikRiza: z.boolean(),
+  gizlilik: z.boolean(),
+  cerez: z.boolean(),
+  cihazVerisi: z.boolean(),
+  kullanimSartlari: z.boolean(),
+  yasalSorumluluk: z.boolean(),
+  istegeBagliBildirim: z.boolean().optional()
+});
+
 const registerSchema = z.object({
   username: z.string().min(3).max(40),
   password: z.string().min(6).max(120),
   inviteKey: z.string().min(1),
-  consents: z
-    .object({
-      privacy: z.boolean(),
-      kvkk: z.boolean(),
-      cookies: z.boolean(),
-      legal: z.boolean()
-    })
-    .optional()
+  consents: consentSchema
 });
 
 const loginSchema = z.object({
@@ -51,6 +55,18 @@ function responseUser(user: Pick<UserRow, "id" | "username" | "role">) {
     username: user.username,
     role: user.role
   };
+}
+
+function hasRequiredConsents(consents: z.infer<typeof consentSchema>): boolean {
+  return (
+    consents.kvkk &&
+    consents.acikRiza &&
+    consents.gizlilik &&
+    consents.cerez &&
+    consents.cihazVerisi &&
+    consents.kullanimSartlari &&
+    consents.yasalSorumluluk
+  );
 }
 
 async function createSessionTokens(input: {
@@ -123,7 +139,7 @@ export const authRouter = Router();
 authRouter.post("/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Geçersiz kayıt isteği.", details: parsed.error.flatten() });
+    res.status(400).json({ error: "Kayıt bilgileri geçersiz." });
     return;
   }
 
@@ -131,21 +147,18 @@ authRouter.post("/register", async (req, res) => {
   const deviceInfo = req.clientDeviceInfo ?? "unknown";
 
   if (await isIpBanned(ipAddress)) {
-    res.status(403).json({ error: "IP erişimi yasaklı." });
+    res.status(403).json({ error: "Bu cihaz için kayıt işlemi kısıtlandı." });
     return;
   }
 
-  if (parsed.data.inviteKey.trim() !== config.REGISTER_INVITE_KEY) {
+  if (hashToken(parsed.data.inviteKey.trim()) !== config.REGISTER_INVITE_KEY_HASH.toLowerCase()) {
     res.status(403).json({ error: "Kayıt anahtarı geçersiz." });
     return;
   }
 
-  if (parsed.data.consents) {
-    const { privacy, kvkk, cookies, legal } = parsed.data.consents;
-    if (!privacy || !kvkk || !cookies || !legal) {
-      res.status(400).json({ error: "Tüm zorunlu onaylar kabul edilmelidir." });
-      return;
-    }
+  if (!hasRequiredConsents(parsed.data.consents)) {
+    res.status(400).json({ error: "Zorunlu onaylar tamamlanmadan kayıt yapılamaz." });
+    return;
   }
 
   const username = normalizeUsername(parsed.data.username);
@@ -179,6 +192,14 @@ authRouter.post("/register", async (req, res) => {
     [user.id, ipAddress, deviceInfo]
   );
 
+  await createAuditLog({
+    adminUserId: null,
+    action: "CONSENT_ACCEPT",
+    targetUserId: user.id,
+    ipAddress,
+    details: parsed.data.consents
+  });
+
   res.status(201).json({
     user: responseUser(user),
     accessToken: session.accessToken,
@@ -191,7 +212,7 @@ authRouter.post("/register", async (req, res) => {
 authRouter.post("/login", async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Geçersiz giriş isteği.", details: parsed.error.flatten() });
+    res.status(400).json({ error: "Giriş bilgileri geçersiz." });
     return;
   }
 
@@ -199,7 +220,7 @@ authRouter.post("/login", async (req, res) => {
   const deviceInfo = req.clientDeviceInfo ?? "unknown";
 
   if (await isIpBanned(ipAddress)) {
-    res.status(403).json({ error: "IP erişimi yasaklı." });
+    res.status(403).json({ error: "Bu cihaz için erişim kısıtlandı." });
     return;
   }
 
@@ -232,7 +253,7 @@ authRouter.post("/login", async (req, res) => {
   }
 
   if (user.is_banned) {
-    res.status(403).json({ error: `Hesap banlandı. ${user.ban_reason ?? ""}`.trim() });
+    res.status(403).json({ error: "Hesap kullanıma kapatıldı." });
     return;
   }
 
@@ -261,14 +282,14 @@ authRouter.post("/login", async (req, res) => {
 authRouter.post("/refresh", async (req, res) => {
   const parsed = refreshSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Geçersiz refresh isteği." });
+    res.status(400).json({ error: "Oturum yenileme isteği geçersiz." });
     return;
   }
 
   try {
     const payload = verifyJwt(parsed.data.refreshToken);
     if (payload.type !== "refresh") {
-      res.status(401).json({ error: "Geçersiz refresh token." });
+      res.status(401).json({ error: "Oturum doğrulanamadı." });
       return;
     }
 
@@ -299,14 +320,14 @@ authRouter.post("/refresh", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      res.status(401).json({ error: "Refresh token geçersiz veya süresi doldu." });
+      res.status(401).json({ error: "Oturum doğrulanamadı." });
       return;
     }
 
     const row = rows[0];
     if (!row.is_active || row.is_banned) {
       await query(`UPDATE sessions SET revoked_at = NOW() WHERE id = $1`, [row.session_id]);
-      res.status(403).json({ error: "Hesap aktif değil veya banlı." });
+      res.status(403).json({ error: "Hesap erişimi kapalı." });
       return;
     }
 
@@ -331,13 +352,13 @@ authRouter.post("/refresh", async (req, res) => {
 
     res.json({ accessToken, expiresAt });
   } catch {
-    res.status(401).json({ error: "Refresh token doğrulanamadı." });
+    res.status(401).json({ error: "Oturum doğrulanamadı." });
   }
 });
 
 authRouter.post("/logout", requireAuth, async (req, res) => {
   if (!req.auth) {
-    res.status(401).json({ error: "Yetkisiz." });
+    res.status(401).json({ error: "Oturum doğrulanamadı." });
     return;
   }
 
@@ -355,7 +376,7 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
 
 authRouter.get("/me", requireAuth, async (req, res) => {
   if (!req.auth) {
-    res.status(401).json({ error: "Yetkisiz." });
+    res.status(401).json({ error: "Oturum doğrulanamadı." });
     return;
   }
 

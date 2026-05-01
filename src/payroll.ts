@@ -11,15 +11,32 @@
   MonthlySummary,
   PayrollSettings,
   ShiftRecord,
-  ShiftType
+  ShiftType,
+  TerminationType
 } from "./types";
 
 const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE_REGEX = /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[0-1])$/;
+const TR_DATE_REGEX = /^(0[1-9]|[12]\d|3[01])\.(0[1-9]|1[0-2])\.\d{4}$/;
 
 const FIXED_HOLIDAY_MONTH_DAYS = ["01-01", "04-23", "05-01", "05-19", "07-15", "08-30", "10-29"];
 
 const WEEKDAY_LABELS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+
+const RESIGNATION_TEMPLATE_TEXTS = {
+  STANDARD: "Kendi isteğimle işten ayrılmak istiyorum.",
+  NOTICE_WITH: "İhbar süresine uyarak işten ayrılmak istiyorum.",
+  NOTICE_WITHOUT: "Yasal haklarım saklı kalmak üzere ihbar süresiz ayrılış talep ediyorum.",
+  RETIREMENT: "Emeklilik hakkı kazandığım için işten ayrılıyorum.",
+  MARRIAGE: "Evlilik nedeniyle yasal süre içinde iş sözleşmemi feshediyorum.",
+  HEALTH: "Sağlık nedenleriyle iş sözleşmemi feshediyorum.",
+  SALARY_UNPAID: "Ücretlerim düzenli ödenmediği için haklı nedenle fesih bildiriyorum.",
+  OVERTIME_UNPAID: "Fazla mesai ücretlerim ödenmediği için haklı nedenle fesih bildiriyorum.",
+  MOBBING: "İşyerinde maruz kaldığım mobbing nedeniyle haklı nedenle fesih bildiriyorum.",
+  MILITARY: "Askerlik görevi nedeniyle işten ayrılıyorum.",
+  PROBATION: "Deneme süresi içinde işten ayrılıyorum.",
+  WORK_CONDITION_CHANGE: "İş şartlarının esaslı değişikliği nedeniyle fesih bildiriyorum."
+} as const;
 
 export const DEFAULT_SETTINGS: PayrollSettings = {
   salaryMode: "NET",
@@ -37,7 +54,8 @@ export const DEFAULT_SETTINGS: PayrollSettings = {
   dailyMealFee: 0,
   dailyTransportFee: 0,
   salaryPaymentDay: 5,
-  monthlyTarget: 0
+  monthlyTarget: 0,
+  themePreference: "SYSTEM"
 };
 
 export const DEFAULT_MONTH_PAYMENT: MonthPayment = {
@@ -65,8 +83,26 @@ export const DEFAULT_DATA: AppData = {
     hireDate: "",
     terminationDate: "",
     grossSalary: 0,
+    mealAllowance: 0,
+    transportAllowance: 0,
+    otherAllowance: 0,
     unusedAnnualLeaveDays: 0,
-    terminationType: "EMPLOYER_TERMINATION"
+    stampTaxRate: 0.759,
+    severanceCap: 0,
+    terminationType: "EMPLOYER_TERMINATION",
+    terminationReason: "",
+    resignationTemplate: "STANDARD",
+    resignationForm: {
+      fullName: "",
+      tcNo: "",
+      companyName: "",
+      department: "",
+      hireDate: "",
+      leaveDate: "",
+      letterDate: "",
+      address: "",
+      explanation: ""
+    }
   },
   shifts: [],
   activeSession: null
@@ -97,50 +133,49 @@ export function safePositive(value: number): number {
   return Math.max(0, value);
 }
 
-function parseTimeToMinutes(value: string): number | null {
-  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
-  if (!match) {
-    return null;
-  }
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  return hour * 60 + minute;
-}
-
-function isNightShiftWindow(start: string, end: string): boolean {
-  const startMinutes = parseTimeToMinutes(start);
-  const endMinutes = parseTimeToMinutes(end);
-  if (startMinutes === null || endMinutes === null) {
-    return false;
-  }
-
-  const intervals: Array<{ from: number; to: number }> = [];
-  if (endMinutes > startMinutes) {
-    intervals.push({ from: startMinutes, to: endMinutes });
-  } else {
-    intervals.push({ from: startMinutes, to: 24 * 60 });
-    intervals.push({ from: 0, to: endMinutes });
-  }
-
-  const nightIntervals = [
-    { from: 20 * 60, to: 24 * 60 },
-    { from: 0, to: 6 * 60 }
-  ];
-
-  for (const interval of intervals) {
-    for (const night of nightIntervals) {
-      const overlap = Math.max(0, Math.min(interval.to, night.to) - Math.max(interval.from, night.from));
-      if (overlap > 0) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 export function tryParseNumber(value: string): number {
   const parsed = Number(value.replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function maskTrDateInput(input: string): string {
+  const digits = input.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) {
+    return digits;
+  }
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  }
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+}
+
+export function isTrDate(value: string): boolean {
+  if (!TR_DATE_REGEX.test(value)) {
+    return false;
+  }
+  return parseTrDate(value) !== null;
+}
+
+export function parseTrDate(value: string): Date | null {
+  if (!TR_DATE_REGEX.test(value)) {
+    return null;
+  }
+  const [dayStr, monthStr, yearStr] = value.split(".");
+  const day = Number(dayStr);
+  const month = Number(monthStr);
+  const year = Number(yearStr);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
+    return null;
+  }
+  return date;
+}
+
+export function formatDateToTr(value: Date): string {
+  const day = `${value.getDate()}`.padStart(2, "0");
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const year = value.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
 export function formatCurrency(value: number): string {
@@ -227,10 +262,7 @@ export function formatDateKeyTr(dateKey: string): string {
   if (!date) {
     return dateKey;
   }
-  const day = `${date.getDate()}`.padStart(2, "0");
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}.${month}.${year}`;
+  return formatDateToTr(date);
 }
 
 export function monthLabelTr(monthKey: string): string {
@@ -354,11 +386,7 @@ export function shiftMonthKey(shift: ShiftRecord): string {
   return toMonthKey(date);
 }
 
-export function autoShiftType(
-  requestedType: ShiftType,
-  startAtIso: string,
-  holidayDates: string[]
-): ShiftType {
+export function autoShiftType(requestedType: ShiftType, startAtIso: string, holidayDates: string[]): ShiftType {
   if (requestedType !== "NORMAL") {
     return requestedType;
   }
@@ -383,11 +411,7 @@ export function durationHours(shift: ShiftRecord): number {
   return round2(Math.max(0, rawHours - breakHours));
 }
 
-export function createWorkedRecord(
-  dateKey: string,
-  settings: PayrollSettings,
-  isManual: boolean
-): DayRecord {
+export function createWorkedRecord(dateKey: string, settings: PayrollSettings, isManual: boolean): DayRecord {
   return {
     dateKey,
     status: "WORKED",
@@ -497,7 +521,6 @@ export function calculateMonthlySummary(
 
   let totalHours = 0;
   let overtimeHours = 0;
-  let nightOvertimeHours = 0;
   let sundayHours = 0;
   let ubgtHours = 0;
 
@@ -514,13 +537,8 @@ export function calculateMonthlySummary(
       const kind = dayTypeOf(dateKey, holidayDates);
       const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
       const workedOvertime = safePositive(record.work?.overtimeHours ?? settings.defaultOvertimeHours);
-      const startTime = record.work?.start ?? settings.defaultShiftStart;
-      const endTime = record.work?.end ?? settings.defaultShiftEnd;
       totalHours += workHours;
       overtimeHours += workedOvertime;
-      if (isNightShiftWindow(startTime, endTime)) {
-        nightOvertimeHours += workedOvertime;
-      }
 
       if (kind === "UBGT") {
         ubgtWorkedDays += 1;
@@ -559,11 +577,9 @@ export function calculateMonthlySummary(
   const dailySalary = salaryConfigured ? monthlySalary / 30 : 0;
 
   const reportDeduction = salaryConfigured ? reportDays * dailySalary : 0;
-  const payableSalaryDays = workedDays + annualLeaveDays + ubgtWorkedDays;
-  const baseSalary = salaryConfigured ? Math.max(0, dailySalary * payableSalaryDays - reportDeduction) : 0;
+  const baseSalary = salaryConfigured ? Math.max(0, monthlySalary - reportDeduction) : 0;
   const overtimePay = salaryConfigured
-    ? overtimeHours * hourlyRate * safePositive(settings.coefficients.overtime) +
-      nightOvertimeHours * hourlyRate * safePositive(settings.coefficients.overtime) * 0.25
+    ? overtimeHours * hourlyRate * safePositive(settings.coefficients.overtime)
     : 0;
   const sundayPay = salaryConfigured ? sundayHours * hourlyRate * safePositive(settings.coefficients.sunday) : 0;
   const ubgtPay = salaryConfigured ? ubgtHours * hourlyRate * safePositive(settings.coefficients.holiday) : 0;
@@ -663,16 +679,10 @@ export function calculateMonthlyAnalytics(
     }
 
     const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
-    const overtimeHours = safePositive(record.work?.overtimeHours ?? settings.defaultOvertimeHours);
-    const startTime = record.work?.start ?? settings.defaultShiftStart;
-    const endTime = record.work?.end ?? settings.defaultShiftEnd;
+    const overHours = safePositive(record.work?.overtimeHours ?? settings.defaultOvertimeHours);
     const dayType = dayTypeOf(dateKey, holidayDates);
     const hourlyRate = safePositive(summary.hourlyRate);
-    const overtimeCoeff = safePositive(settings.coefficients.overtime);
-    const nightPremium =
-      isNightShiftWindow(startTime, endTime) ? overtimeHours * hourlyRate * overtimeCoeff * 0.25 : 0;
-
-    const overtimePay = overtimeHours * hourlyRate * overtimeCoeff + nightPremium;
+    const overtimePay = overHours * hourlyRate * safePositive(settings.coefficients.overtime);
     const sundayPay = dayType === "SUNDAY" ? workHours * hourlyRate * safePositive(settings.coefficients.sunday) : 0;
     const ubgtPay = dayType === "UBGT" ? workHours * hourlyRate * safePositive(settings.coefficients.holiday) : 0;
     const benefitPay = safePositive(settings.dailyMealFee) + safePositive(settings.dailyTransportFee);
@@ -695,14 +705,14 @@ export function calculateMonthlyAnalytics(
 
   let salaryWarning: string | null = null;
   if (!summary.salaryConfigured) {
-    salaryWarning = "Bu ay bordro baz aylık ücret veya aylık baz saat girilmedi.";
+    salaryWarning = "Bu ay maaş veya baz saat bilgisi eksik.";
   } else {
     const now = new Date();
     const nowMonthKey = toMonthKey(now);
     const isPastMonth = monthKey < nowMonthKey;
     const isCurrentMonthAfterPaymentDay = monthKey === nowMonthKey && now.getDate() >= salaryPaymentDay;
     if ((isPastMonth || isCurrentMonthAfterPaymentDay) && summary.paid.salary <= 0) {
-      salaryWarning = `Bu ay maaş girilmedi (ödeme günü: ${salaryPaymentDay}).`;
+      salaryWarning = `Bu ay için maaş girişi yapılmadı (ödeme günü: ${salaryPaymentDay}).`;
     }
   }
 
@@ -765,33 +775,95 @@ export function totalDifferenceForAllMonths(data: AppData): number {
   return round2(total);
 }
 
+function calculateServiceParts(start: Date, end: Date): { years: number; months: number; days: number; totalDays: number } {
+  const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+  if (endDate < startDate) {
+    return { years: 0, months: 0, days: 0, totalDays: 0 };
+  }
+
+  let years = endDate.getFullYear() - startDate.getFullYear();
+  let months = endDate.getMonth() - startDate.getMonth();
+  let days = endDate.getDate() - startDate.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const previousMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 0).getDate();
+    days += previousMonth;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  return {
+    years: Math.max(0, years),
+    months: Math.max(0, months),
+    days: Math.max(0, days),
+    totalDays: Math.max(0, totalDays)
+  };
+}
+
+function noticeWeeksFromServiceDays(serviceDays: number): number {
+  if (serviceDays < 180) {
+    return 2;
+  }
+  if (serviceDays < 540) {
+    return 4;
+  }
+  if (serviceDays < 1080) {
+    return 6;
+  }
+  return 8;
+}
+
+export function terminationTypeLabel(type: TerminationType): string {
+  if (type === "EMPLOYER_TERMINATION") return "İşveren feshi";
+  if (type === "EMPLOYEE_RESIGNATION") return "İstifa";
+  if (type === "JUST_CAUSE_EMPLOYEE") return "İşçi haklı feshi";
+  return "Karşılıklı anlaşma";
+}
+
 export function calculateLegalResult(legal: LegalSettings): LegalResult {
   const grossSalary = safePositive(legal.grossSalary);
-  const hireDate = dateKeyToDate(legal.hireDate);
-  const rawEndDate = dateKeyToDate(legal.terminationDate);
+  const hireDate = parseTrDate(legal.hireDate);
+  const rawEndDate = legal.terminationDate ? parseTrDate(legal.terminationDate) : new Date();
   const endDate = rawEndDate ?? new Date();
 
-  if (!hireDate || endDate.getTime() < hireDate.getTime() || grossSalary <= 0) {
+  if (!hireDate || !rawEndDate || endDate.getTime() < hireDate.getTime() || grossSalary <= 0) {
     return {
       serviceDays: 0,
       serviceYears: 0,
+      serviceMonths: 0,
+      serviceRemainDays: 0,
+      serviceText: "0 yıl 0 ay 0 gün",
       annualLeaveEntitled: 0,
       annualLeaveRemaining: 0,
       annualLeavePay: 0,
-      severancePay: 0,
+      severanceBase: 0,
+      severancePayGross: 0,
+      severanceStampTax: 0,
+      severancePayNet: 0,
       noticeWeeks: 0,
       noticePay: 0,
       estimatedTotal: 0
     };
   }
 
-  const msInDay = 1000 * 60 * 60 * 24;
-  const serviceDays = Math.floor((endDate.getTime() - hireDate.getTime()) / msInDay);
-  const serviceYears = serviceDays / 365;
-  const completedYears = Math.floor(serviceYears);
+  const totalMonthlyGross =
+    grossSalary +
+    safePositive(legal.mealAllowance) +
+    safePositive(legal.transportAllowance) +
+    safePositive(legal.otherAllowance);
+
+  const serviceParts = calculateServiceParts(hireDate, endDate);
+  const serviceYearsFloat = serviceParts.totalDays / 365;
 
   let annualLeaveEntitled = 0;
-  for (let year = 1; year <= completedYears; year += 1) {
+  for (let year = 1; year <= Math.floor(serviceYearsFloat); year += 1) {
     if (year <= 5) {
       annualLeaveEntitled += 14;
     } else if (year < 15) {
@@ -802,47 +874,74 @@ export function calculateLegalResult(legal: LegalSettings): LegalResult {
   }
 
   const annualLeaveRemaining = safePositive(legal.unusedAnnualLeaveDays);
-  const dailyGross = grossSalary / 30;
+  const dailyGross = totalMonthlyGross / 30;
   const annualLeavePay = annualLeaveRemaining * dailyGross;
 
-  let baseNoticeWeeks = 0;
-  if (serviceDays >= 14) {
-    if (serviceDays < 180) {
-      baseNoticeWeeks = 2;
-    } else if (serviceDays < 540) {
-      baseNoticeWeeks = 4;
-    } else if (serviceDays < 1080) {
-      baseNoticeWeeks = 6;
-    } else {
-      baseNoticeWeeks = 8;
-    }
-  }
+  const noticeWeeks = noticeWeeksFromServiceDays(serviceParts.totalDays);
+  const noticePay = dailyGross * noticeWeeks * 7;
 
-  let noticeWeeks = 0;
-  let noticePay = 0;
+  const severanceMonthlyBase =
+    safePositive(legal.severanceCap) > 0 ? Math.min(totalMonthlyGross, safePositive(legal.severanceCap)) : totalMonthlyGross;
+  const severancePayGross = serviceYearsFloat >= 1 ? severanceMonthlyBase * serviceYearsFloat : 0;
+  const severanceStampTax = severancePayGross * (safePositive(legal.stampTaxRate) / 100);
+  const severancePayNet = Math.max(0, severancePayGross - severanceStampTax);
 
-  if (legal.terminationType === "EMPLOYER_TERMINATION") {
-    noticeWeeks = baseNoticeWeeks;
-    noticePay = dailyGross * (noticeWeeks * 7);
-  } else if (legal.terminationType === "EMPLOYEE_RESIGNATION") {
-    noticeWeeks = baseNoticeWeeks;
-    noticePay = 0;
-  }
-
-  const isSeveranceEligible = legal.terminationType !== "EMPLOYEE_RESIGNATION" && serviceYears >= 1;
-  const severancePay = isSeveranceEligible ? grossSalary * serviceYears : 0;
-  const estimatedTotal = severancePay + noticePay + annualLeavePay;
+  const estimatedTotal = severancePayNet + noticePay + annualLeavePay;
 
   return {
-    serviceDays,
-    serviceYears: round2(serviceYears),
+    serviceDays: serviceParts.totalDays,
+    serviceYears: serviceParts.years,
+    serviceMonths: serviceParts.months,
+    serviceRemainDays: serviceParts.days,
+    serviceText: `${serviceParts.years} yıl ${serviceParts.months} ay ${serviceParts.days} gün`,
     annualLeaveEntitled,
-    annualLeaveRemaining,
+    annualLeaveRemaining: round2(annualLeaveRemaining),
     annualLeavePay: round2(annualLeavePay),
-    severancePay: round2(severancePay),
+    severanceBase: round2(severanceMonthlyBase),
+    severancePayGross: round2(severancePayGross),
+    severanceStampTax: round2(severanceStampTax),
+    severancePayNet: round2(severancePayNet),
     noticeWeeks,
     noticePay: round2(noticePay),
     estimatedTotal: round2(estimatedTotal)
   };
 }
 
+export function resignationTemplateText(key: keyof typeof RESIGNATION_TEMPLATE_TEXTS): string {
+  return RESIGNATION_TEMPLATE_TEXTS[key];
+}
+
+export function buildResignationDraft(input: {
+  template: keyof typeof RESIGNATION_TEMPLATE_TEXTS;
+  fullName: string;
+  tcNo: string;
+  companyName: string;
+  department: string;
+  hireDate: string;
+  leaveDate: string;
+  letterDate: string;
+  address: string;
+  explanation: string;
+}): string {
+  const reason = input.explanation.trim() || resignationTemplateText(input.template);
+  return [
+    "İSTİFA DİLEKÇESİ",
+    "",
+    `Tarih: ${input.letterDate || "..../..../........"}`,
+    `İşveren: ${input.companyName || "............................"}`,
+    `Departman: ${input.department || "............................"}`,
+    `Adres: ${input.address || "............................"}`,
+    "",
+    `İşe Giriş Tarihi: ${input.hireDate || "..../..../........"}`,
+    `Ayrılış Tarihi: ${input.leaveDate || "..../..../........"}`,
+    "",
+    "Açıklama:",
+    reason,
+    "",
+    "Bilgilerinize sunarım.",
+    "",
+    `Ad Soyad: ${input.fullName || "............................"}`,
+    `T.C. Kimlik No: ${input.tcNo || "............................"}`,
+    "İmza:"
+  ].join("\n");
+}

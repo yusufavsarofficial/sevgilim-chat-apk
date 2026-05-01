@@ -1,11 +1,14 @@
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as Device from "expo-device";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -15,10 +18,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   useWindowDimensions,
   View
 } from "react-native";
 import {
+  buildResignationDraft,
   buildMonthGrid,
   calculateMonthlyAnalytics,
   calculateLegalResult,
@@ -39,6 +44,7 @@ import {
   formatSignedCurrency,
   isIsoDate,
   isMonthKey,
+  maskTrDateInput,
   monthLabelTr,
   monthlyDifferenceLabel,
   nextMonthKey,
@@ -66,7 +72,6 @@ import {
   adminGetUsers,
   adminRevokeUserSessions,
   adminUnbanUser,
-  getApiBaseUrl,
   pingBackend,
   pullPayrollFromBackend,
   pushPayrollToBackend,
@@ -76,9 +81,18 @@ import {
   remoteRegister,
   sendSecuritySignal
 } from "./src/api";
-import { AppData, AuthUser, DayRecord, DayStatus, LegalSettings, MonthPayment, TerminationType } from "./src/types";
+import {
+  AppData,
+  AuthUser,
+  DayRecord,
+  DayStatus,
+  LegalSettings,
+  MonthPayment,
+  TerminationType,
+  ThemePreference
+} from "./src/types";
 
-type Tab = "CALENDAR" | "SUMMARY" | "SETTINGS" | "CLOUD" | "LEGAL" | "CPANEL";
+type Tab = "CALENDAR" | "SUMMARY" | "SETTINGS" | "SYNC" | "LEGAL" | "USERS";
 type PaymentField = keyof MonthPayment;
 type NumericSettingKey =
   | "monthlySalary"
@@ -96,6 +110,95 @@ const TERMINATION_TYPE_OPTIONS: Array<{ value: TerminationType; label: string }>
   { value: "EMPLOYEE_RESIGNATION", label: "İstifa" },
   { value: "JUST_CAUSE_EMPLOYEE", label: "İşçi haklı fesih" },
   { value: "MUTUAL_AGREEMENT", label: "Karşılıklı anlaşma (ikale)" }
+];
+
+const GENEL_HATA = "İşlem gerçekleştirilemedi, lütfen tekrar deneyin.";
+
+const LEGAL_SECTIONS: Array<{ id: string; title: string; content: string }> = [
+  {
+    id: "kvkk",
+    title: "KVKK Aydınlatma Metni",
+    content:
+      "AYFSOFT, puantaj ve maaş hesaplama hizmetini sunarken kimlik bilgileri, çalışma kayıtları, izin/mesai verileri ve oturum güvenliği kayıtlarını veri minimizasyonu ilkesiyle işler. İşleme amacı; hizmetin sunulması, mevzuat yükümlülüklerinin yerine getirilmesi, bilgi güvenliğinin sağlanması ve kullanıcı taleplerinin yönetimidir. Veriler yalnızca yetkili kişilerce erişilebilir şekilde saklanır; saklama süresi dolan veya işleme amacı ortadan kalkan veriler silinir, yok edilir veya anonim hale getirilir. Kullanıcı, KVKK 11. madde kapsamındaki tüm haklarını kullanabilir."
+  },
+  {
+    id: "acik-riza",
+    title: "Açık Rıza Metni",
+    content:
+      "Kullanıcı; uygulamada yer alan kişisel veri işleme süreçleri, cihaz verisi kullanımı, güvenlik kayıtları ve hukuki bilgilendirme metinleri hakkında aydınlatıldığını kabul eder. Açık rıza, özgür iradeyle ve bilgilendirmeye dayalı olarak verilir; kullanıcı dilediği zaman ilgili başvuru kanalları üzerinden rızasını geri çekebilir. Rızanın geri çekilmesi, geri çekme tarihine kadar yapılan işlemleri hukuka aykırı hale getirmez."
+  },
+  {
+    id: "gizlilik",
+    title: "Gizlilik Politikası",
+    content:
+      "Uygulama verileri yetkisiz erişim, ifşa, değiştirme ve kayba karşı teknik ve idari tedbirlerle korunur. Kimlik doğrulama, oturum yönetimi, oran sınırlama, erişim denetimi ve kayıt mekanizmaları güvenlik çerçevesinin parçasıdır. Kullanıcı verileri ticari amaçla üçüncü taraflara satılmaz. Yasal zorunluluk veya resmi merci talebi dışında paylaşım yapılmaz."
+  },
+  {
+    id: "cerez",
+    title: "Çerez Politikası",
+    content:
+      "Uygulama, oturum sürekliliği ve güvenlik için teknik çerez benzeri işaretleyiciler kullanabilir. Bu bileşenler reklam amaçlı değil, yalnızca hizmetin güvenli çalışması ve kullanıcı deneyiminin sürdürülebilmesi için kullanılır. Zorunlu olmayan kullanım senaryoları devreye alınırsa kullanıcı ayrıca bilgilendirilir."
+  },
+  {
+    id: "cihaz",
+    title: "Cihaz Verisi Politikası",
+    content:
+      "Cihaz modeli, işletim sistemi sürümü, uygulama sürümü ve güvenlik sinyalleri (ör. emülatör/gerçek cihaz bilgisi) yalnızca güvenlik, hata teşhisi ve hizmet kalitesi amaçlarıyla işlenir. Bu veriler, kullanıcıyı teknik risklerden korumak ve hizmet sürekliliğini sağlamak için kullanılır."
+  },
+  {
+    id: "kullanim-sartlari",
+    title: "Kullanım Şartları",
+    content:
+      "Uygulama çıktıları bilgilendirme ve takip amaçlıdır. Resmî bordro, iş sözleşmesi, şirket içi kayıtlar ve ilgili mevzuat önceliklidir. Kullanıcı, girdiği bilgilerin doğruluğundan sorumludur. Uygulama verilerinin eksik veya hatalı girilmesi halinde oluşabilecek sonuçlardan kullanıcı sorumludur."
+  },
+  {
+    id: "yasal-sorumluluk",
+    title: "Yasal Sorumluluk Reddi",
+    content:
+      "Uygulamadaki hesaplamalar genel formüller üzerinden yapılır ve her işyeri sözleşme şartı için bire bir sonuç garantisi vermez. İş hukuku uyuşmazlıklarında avukat, mali müşavir veya yetkili kurum görüşü esas alınmalıdır. Uygulama hiçbir durumda resmî hukuki mütalaa yerine geçmez."
+  },
+  {
+    id: "veri-saklama",
+    title: "Veri Saklama",
+    content:
+      "Kişisel veriler işleme amacı ve yasal saklama süreleri boyunca tutulur. Süre sonunda veriler güvenli şekilde imha edilir veya anonim hale getirilir. Yedekleme, bütünlük kontrolü ve erişim kayıtları düzenli güvenlik kontrolleriyle yönetilir."
+  },
+  {
+    id: "veri-silme",
+    title: "Veri Silme",
+    content:
+      "Kullanıcı, hesabı veya verileri için silme talebi iletebilir. Talep mevzuata uygun olarak değerlendirilir; saklama zorunluluğu bulunmayan veriler silinir. Silme işlemi tamamlandığında kullanıcıya bilgilendirme yapılır."
+  },
+  {
+    id: "kullanici-haklari",
+    title: "Kullanıcı Hakları",
+    content:
+      "Kullanıcı; veriye erişim, düzeltme, silme, işleme kısıtlama, itiraz, taşınabilirlik ve bilgi talebi haklarını kullanabilir. Başvurular kimlik doğrulaması sonrası makul sürede cevaplanır. Uyuşmazlık halinde ilgili denetim kurumlarına başvuru hakkı saklıdır."
+  },
+  {
+    id: "is-hukuku",
+    title: "İş Hukuku Bilgilendirme",
+    content:
+      "Puantaj, fazla mesai, hafta tatili ve UBGT hesapları iş sözleşmesi, toplu iş sözleşmesi ve güncel mevzuat birlikte değerlendirilerek yorumlanmalıdır. Uygulama hesapları yönlendirici niteliktedir; bağlayıcı bordro hükmü oluşturmaz."
+  },
+  {
+    id: "kidem",
+    title: "Kıdem Tazminatı Bilgisi",
+    content:
+      "Kıdem tazminatı hesabı, hizmet süresi, brüt ücret ve yasal tavan gibi değişkenlere bağlıdır. Uygulamadaki sonuç tahmin niteliğindedir. Nihai hesaplama için güncel tavan tutarı, sözleşme koşulları ve mevzuat hükümleri birlikte değerlendirilmelidir."
+  },
+  {
+    id: "ihbar",
+    title: "İhbar Tazminatı Bilgisi",
+    content:
+      "İhbar süresi, çalışma süresine göre değişir ve bildirim yükümlülüğüne uyulmaması halinde tazminat doğabilir. Hesaplama, brüt ücret ve yasal süreler üzerinden yapılır. Özel sözleşme hükümleri varsa ayrıca değerlendirilmelidir."
+  },
+  {
+    id: "istifa",
+    title: "İstifa Süreçleri",
+    content:
+      "İstifa sürecinde tarih, gerekçe ve teslim biçimi önemlidir. Haklı fesih, askerlik, evlilik, mobbing veya ücretin ödenmemesi gibi nedenlerde mevzuata uygun belge ve bildirim düzeni izlenmelidir. Uygulama, dilekçe taslakları sunar; nihai metin somut olaya göre uzman desteğiyle kontrol edilmelidir."
+  }
 ];
 
 type AdminPanelStats = {
@@ -222,11 +325,15 @@ export default function App() {
   const [backendConnected, setBackendConnected] = useState(false);
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [authInviteKey, setAuthInviteKey] = useState("2026Yusuf");
-  const [consentPrivacy, setConsentPrivacy] = useState(false);
+  const [authInviteKey, setAuthInviteKey] = useState("");
   const [consentKvkk, setConsentKvkk] = useState(false);
-  const [consentCookies, setConsentCookies] = useState(false);
-  const [consentLegal, setConsentLegal] = useState(false);
+  const [consentAcikRiza, setConsentAcikRiza] = useState(false);
+  const [consentGizlilik, setConsentGizlilik] = useState(false);
+  const [consentCerez, setConsentCerez] = useState(false);
+  const [consentCihazVerisi, setConsentCihazVerisi] = useState(false);
+  const [consentYasalSorumluluk, setConsentYasalSorumluluk] = useState(false);
+  const [legalModalVisible, setLegalModalVisible] = useState(false);
+  const [openLegalSectionMap, setOpenLegalSectionMap] = useState<Record<string, boolean>>({});
   const [adminUsers, setAdminUsers] = useState<AdminPanelUser[]>([]);
   const [adminStats, setAdminStats] = useState<AdminPanelStats | null>(null);
   const [adminSelectedUser, setAdminSelectedUser] = useState<AdminPanelUserDetail | null>(null);
@@ -249,8 +356,14 @@ export default function App() {
   );
   const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSequenceRef = useRef(0);
+  const usernameInputRef = useRef<TextInput | null>(null);
+  const passwordInputRef = useRef<TextInput | null>(null);
+  const inviteKeyInputRef = useRef<TextInput | null>(null);
 
   const { width } = useWindowDimensions();
+  const deviceTheme = useColorScheme();
+  const selectedTheme: ThemePreference = appData.settings.themePreference ?? "SYSTEM";
+  const effectiveDarkMode = selectedTheme === "DARK" || (selectedTheme === "SYSTEM" && deviceTheme === "dark");
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -501,10 +614,21 @@ export default function App() {
 
   const applyBulkDayStatus = (status: DayStatus | null) => {
     if (bulkRangeDateKeys.length === 0) {
-      Alert.alert("Toplu işlem", "Önce takvimden bir aralık seç.");
+      Alert.alert("Toplu işlem", "Önce takvimden bir aralık seçin.");
       return;
     }
-    applyDayStatusToDates(bulkRangeDateKeys, status);
+    const nextStatusText = dayStatusLabel(status);
+    Alert.alert(
+      "Toplu işlem onayı",
+      `${bulkRangeDateKeys.length} g?ne '${nextStatusText}' durumu uygulanacak. Devam edilsin mi?`,
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Uygula",
+          onPress: () => applyDayStatusToDates(bulkRangeDateKeys, status)
+        }
+      ]
+    );
   };
 
   const toggleBulkMode = () => {
@@ -530,7 +654,7 @@ export default function App() {
   const addHolidayDate = () => {
     const dateKey = holidayInput.trim();
     if (!isIsoDate(dateKey)) {
-      Alert.alert("Tarih hatalı", "Tarih YYYY-MM-DD formatında olmalı.");
+      Alert.alert("Tarih hatalı", "Tarih YYYY-MM-DD formatında olmalıdır.");
       return;
     }
 
@@ -581,6 +705,16 @@ export default function App() {
     }));
   };
 
+  const setThemePreference = (value: ThemePreference) => {
+    setAppData((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        themePreference: value
+      }
+    }));
+  };
+
   const setLegalField = (key: keyof LegalSettings, value: string) => {
     setAppData((prev) => {
       if (key === "hireDate" || key === "terminationDate") {
@@ -588,7 +722,7 @@ export default function App() {
           ...prev,
           legal: {
             ...prev.legal,
-            [key]: value
+            [key]: maskTrDateInput(value)
           }
         };
       }
@@ -726,11 +860,77 @@ export default function App() {
     setAuthError("");
   };
 
-  const isAdminCredential = (username: string, password: string): boolean => {
-    return username.trim().toLowerCase() === "yusuf" && password === "Yusuf123";
+  const sanitizeUserMessage = (error: unknown, fallback: string): string => {
+    if (!(error instanceof Error)) {
+      return fallback;
+    }
+    const text = error.message.trim();
+    if (!text) {
+      return fallback;
+    }
+    const lower = text.toLowerCase();
+    if (
+      lower.includes("api") ||
+      lower.includes("token") ||
+      lower.includes("backend") ||
+      lower.includes("endpoint") ||
+      lower.includes("request") ||
+      lower.includes("http")
+    ) {
+      return fallback;
+    }
+    return text;
+  };
+
+  const toggleLegalSection = (sectionId: string) => {
+    setOpenLegalSectionMap((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
+  };
+
+  const allRequiredConsentsAccepted =
+    consentKvkk &&
+    consentAcikRiza &&
+    consentGizlilik &&
+    consentCerez &&
+    consentCihazVerisi &&
+    consentYasalSorumluluk;
+
+  const resetConsentForm = () => {
+    setConsentKvkk(false);
+    setConsentAcikRiza(false);
+    setConsentGizlilik(false);
+    setConsentCerez(false);
+    setConsentCihazVerisi(false);
+    setConsentYasalSorumluluk(false);
+  };
+
+  const buildConsentPayload = () => ({
+    kvkk: consentKvkk,
+    acikRiza: consentAcikRiza,
+    gizlilik: consentGizlilik,
+    cerez: consentCerez,
+    cihazVerisi: consentCihazVerisi,
+    kullanimSartlari: consentYasalSorumluluk,
+    yasalSorumluluk: consentYasalSorumluluk,
+    istegeBagliBildirim: false
+  });
+
+  const loginLocalWithRoleFallback = async (): Promise<AuthUser> => {
+    try {
+      return await localLoginUser(authUsername, authPassword, "USER");
+    } catch {
+      return localLoginUser(authUsername, authPassword, "ADMIN");
+    }
   };
 
   const handleLogin = async () => {
+    if (!authUsername.trim() || !authPassword.trim()) {
+      setAuthError("Kullanıcı adı ve şifre zorunludur.");
+      return;
+    }
+
     setAuthBusy(true);
     setAuthError("");
     try {
@@ -740,15 +940,14 @@ export default function App() {
       if (backendConnected) {
         user = await remoteLogin(authUsername, authPassword);
       } else {
-        const role = isAdminCredential(authUsername, authPassword) ? "ADMIN" : "USER";
-        user = await localLoginUser(authUsername, authPassword, role);
+        user = await loginLocalWithRoleFallback();
         source = "LOCAL";
       }
 
       await loadUserWorkspace(user, source);
       await reportClientSecurity();
       setAuthPassword("");
-      setAuthInviteKey("2026Yusuf");
+      setAuthInviteKey("");
       if (user.role === "ADMIN") {
         await refreshAdminUsers();
         await refreshAdminStats();
@@ -756,28 +955,37 @@ export default function App() {
     } catch (error) {
       if (backendConnected) {
         try {
-          const role = isAdminCredential(authUsername, authPassword) ? "ADMIN" : "USER";
-          const localUser = await localLoginUser(authUsername, authPassword, role);
+          const localUser = await loginLocalWithRoleFallback();
           await loadUserWorkspace(localUser, "LOCAL");
           await reportClientSecurity();
           setAuthPassword("");
-          setAuthInviteKey("2026Yusuf");
+          setAuthInviteKey("");
           if (localUser.role === "ADMIN") {
             await refreshAdminUsers();
             await refreshAdminStats();
           }
           return;
         } catch {
-          // Prefer backend error when online login fails.
+          // Tercih edilen hata, ?evrimi?i giri?ten d?ner.
         }
       }
-      setAuthError(error instanceof Error ? error.message : "Giriş başarısız.");
+      setAuthError(sanitizeUserMessage(error, "Giriş yapılamadı."));
     } finally {
       setAuthBusy(false);
     }
   };
 
   const handleRegister = async () => {
+    if (!authUsername.trim() || !authPassword.trim() || !authInviteKey.trim()) {
+      setAuthError("Kullanıcı adı, şifre ve kayıt anahtarı zorunludur.");
+      return;
+    }
+
+    if (!allRequiredConsentsAccepted) {
+      setAuthError("Zorunlu onaylar tamamlanmadan kayıt yapılamaz.");
+      return;
+    }
+
     setAuthBusy(true);
     setAuthError("");
     try {
@@ -787,12 +995,7 @@ export default function App() {
         username: authUsername,
         password: authPassword,
         inviteKey: authInviteKey,
-        consents: {
-          privacy: consentPrivacy,
-          kvkk: consentKvkk,
-          cookies: consentCookies,
-          legal: consentLegal
-        }
+        consents: buildConsentPayload()
       };
 
       if (backendConnected) {
@@ -804,11 +1007,9 @@ export default function App() {
 
       await loadUserWorkspace(user, source);
       await reportClientSecurity();
-      setAuthInviteKey("2026Yusuf");
-      setConsentPrivacy(false);
-      setConsentKvkk(false);
-      setConsentCookies(false);
-      setConsentLegal(false);
+      setAuthInviteKey("");
+      setAuthPassword("");
+      resetConsentForm();
     } catch (error) {
       if (backendConnected) {
         try {
@@ -816,26 +1017,19 @@ export default function App() {
             username: authUsername,
             password: authPassword,
             inviteKey: authInviteKey,
-            consents: {
-              privacy: consentPrivacy,
-              kvkk: consentKvkk,
-              cookies: consentCookies,
-              legal: consentLegal
-            }
+            consents: buildConsentPayload()
           });
           await loadUserWorkspace(localUser, "LOCAL");
           await reportClientSecurity();
-          setAuthInviteKey("2026Yusuf");
-          setConsentPrivacy(false);
-          setConsentKvkk(false);
-          setConsentCookies(false);
-          setConsentLegal(false);
+          setAuthInviteKey("");
+          setAuthPassword("");
+          resetConsentForm();
           return;
         } catch {
-          // Prefer backend error when both fail.
+          // Tercih edilen hata, ?evrimi?i kay?ttan d?ner.
         }
       }
-      setAuthError(error instanceof Error ? error.message : "Kayıt başarısız.");
+      setAuthError(sanitizeUserMessage(error, "Kayıt işlemi tamamlanamadı."));
     } finally {
       setAuthBusy(false);
     }
@@ -850,7 +1044,8 @@ export default function App() {
     setAuthUser(null);
     setAuthSource(null);
     setAuthPassword("");
-    setAuthInviteKey("2026Yusuf");
+    setAuthInviteKey("");
+    resetConsentForm();
     setAppData(DEFAULT_DATA);
     setAdminUsers([]);
     setAdminStats(null);
@@ -904,7 +1099,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!authUser || authUser.role !== "ADMIN" || activeTab !== "CPANEL") {
+    if (!authUser || authUser.role !== "ADMIN" || activeTab !== "USERS") {
       return;
     }
 
@@ -931,6 +1126,27 @@ export default function App() {
       mounted = false;
     };
   }, [activeTab, authUser]);
+
+  const safeText = (value: string): string =>
+    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const sharePdf = async (html: string, dialogTitle: string) => {
+    try {
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert("PDF hazır", uri);
+        return;
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        dialogTitle,
+        UTI: "com.adobe.pdf"
+      });
+    } catch {
+      Alert.alert("Hata", GENEL_HATA);
+    }
+  };
 
   const downloadMonthlyReport = async () => {
     if (!isMonthKey(monthKey)) {
@@ -999,89 +1215,73 @@ export default function App() {
       ];
 
       const content = [...header, ...reportRows].join("\n");
-      const baseDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
-      if (!baseDir) {
-        throw new Error("Dosya sistemi dizini bulunamadı.");
-      }
-
-      const fileUri = `${baseDir}puantaj-rapor-${monthKey}.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, content, {
-        encoding: FileSystem.EncodingType.UTF8
-      });
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        Alert.alert("Rapor hazır", `Dosya hazırlandı: ${fileUri}`);
-        return;
-      }
-
-      await Sharing.shareAsync(fileUri, {
-        mimeType: "text/plain",
-        dialogTitle: "Aylık Rapor İndir",
-        UTI: "public.plain-text"
-      });
-    } catch (error) {
-      Alert.alert("Rapor hatası", error instanceof Error ? error.message : "Rapor oluşturulamadı.");
+      const html = [
+        "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:18px;color:#0f172a;\">",
+        "<h1>Puantaj ve Maa? ?zeti</h1>",
+        "<pre style=\"white-space:pre-wrap;font-family:monospace;\">" + safeText(content) + "</pre>",
+        "</body></html>"
+      ].join("");
+      await sharePdf(html, "Maa? PDF ?ndir");
+    } catch {
+      Alert.alert("Hata", GENEL_HATA);
     }
   };
 
-  const downloadLegalTemplate = async (kind: "RESIGN" | "JUST_CAUSE" | "MOBBING") => {
-    const today = new Date();
-    const todayText = today.toLocaleDateString("tr-TR");
-    const hireDateText = appData.legal.hireDate ? formatDateKeyTr(appData.legal.hireDate) : "____/____/________";
-    const endDateText = appData.legal.terminationDate
-      ? formatDateKeyTr(appData.legal.terminationDate)
-      : "____/____/________";
-    const fullName = authUser?.username ?? "Ad Soyad";
+  const downloadTimesheetPdf = async () => {
+    const rows = dailyDetailRows
+      .map((row) => `<tr><td style="padding:6px;border:1px solid #d1d5db;">${safeText(row)}</td></tr>`)
+      .join("");
+    const html = [
+      '<html lang="tr"><head><meta charset="utf-8" /></head><body style="font-family:Arial,sans-serif;padding:18px;color:#0f172a;">',
+      "<h1>Puantaj Özeti</h1>",
+      `<p><strong>Ay:</strong> ${safeText(monthLabelTr(monthKey))}</p>`,
+      '<table style="border-collapse:collapse;width:100%;margin-top:12px;">',
+      rows || '<tr><td style="padding:8px;border:1px solid #d1d5db;">Kayıt bulunamadı.</td></tr>',
+      "</table>",
+      "</body></html>"
+    ].join("");
+    await sharePdf(html, "Puantaj PDF İndir");
+  };
 
-    const subject =
-      kind === "RESIGN"
-        ? "İstifa Dilekçesi"
-        : kind === "JUST_CAUSE"
-          ? "Haklı Fesih Bildirimi"
-          : "Mobbing Bildirim ve Fesih Dilekçesi";
+  const downloadLegalTemplate = async (
+    template: "NORMAL" | "HAKLI_FESIH" | "ASKERLIK" | "EVLILIK" | "MOBBING" | "MAAS_ODENMEMESI"
+  ) => {
+    const templateMap = {
+      NORMAL: "STANDARD",
+      HAKLI_FESIH: "NOTICE_WITHOUT",
+      ASKERLIK: "MILITARY",
+      EVLILIK: "MARRIAGE",
+      MOBBING: "MOBBING",
+      MAAS_ODENMEMESI: "SALARY_UNPAID"
+    } as const;
 
-    const body =
-      kind === "RESIGN"
-        ? `Konu: İstifa\n\n${todayText} tarihi itibarıyla, ${hireDateText} tarihinden bu yana çalıştığım işyerinden kendi isteğimle ayrılmak istiyorum. İş Kanunu kapsamındaki bildirim süreme uygun şekilde işten ayrılış işlemlerimin düzenlenmesini, hak etmiş olduğum ücret, yıllık izin, fazla mesai ve diğer alacaklarımın yasal sürede tarafıma ödenmesini talep ederim.\n\nAd Soyad: ${fullName}\nİmza:\n`
-        : kind === "JUST_CAUSE"
-          ? `Konu: Haklı nedenle fesih bildirimi\n\n${todayText} tarihi itibarıyla, iş sözleşmemi İş Kanunu kapsamında haklı nedenle feshettiğimi bildiririm. Çalışma sürem (${hireDateText} - ${endDateText}) içinde doğan ücret, fazla mesai, UBGT, hafta tatili, yıllık izin ve diğer işçilik alacaklarımın yasal faizi ile birlikte tarafıma ödenmesini talep ederim.\n\nAd Soyad: ${fullName}\nİmza:\n`
-          : `Konu: Mobbing bildirimi ve fesih talebi\n\nİşyerinde maruz kaldığım psikolojik baskı, dışlama ve sistematik olumsuz tutumlar nedeniyle çalışma koşullarım sürdürülemez hale gelmiştir. Bu nedenle ${todayText} tarihi itibarıyla yasal haklarım saklı kalmak kaydıyla durumun kayıt altına alınmasını, gerekli idari incelemenin yapılmasını ve işçilik alacaklarımın eksiksiz ödenmesini talep ederim.\n\nAd Soyad: ${fullName}\nİmza:\n`;
+    const draft = buildResignationDraft({
+      template: templateMap[template],
+      fullName: appData.legal.resignationForm.fullName || authUser?.username || "Ad Soyad",
+      tcNo: appData.legal.resignationForm.tcNo,
+      companyName: appData.legal.resignationForm.companyName || "?irket ?nvan?",
+      department: appData.legal.resignationForm.department || "Departman",
+      hireDate: appData.legal.resignationForm.hireDate || appData.legal.hireDate || "01.01.2025",
+      leaveDate: appData.legal.resignationForm.leaveDate || appData.legal.terminationDate || "01.01.2026",
+      letterDate: appData.legal.resignationForm.letterDate || new Date().toLocaleDateString("tr-TR"),
+      address: appData.legal.resignationForm.address || "Adres",
+      explanation: appData.legal.resignationForm.explanation
+    });
 
-    const content = `${subject}\n\nTarih: ${todayText}\n\n${body}\nNot: Bu metin bilgilendirme amaçlı şablondur. Somut olay için uzman desteği alınmalıdır.\n`;
+    const html = [
+      "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:20px;color:#0f172a;line-height:1.6;white-space:pre-wrap;\">",
+      "<h1>?stifa Dilek?esi</h1>",
+      safeText(draft),
+      "</body></html>"
+    ].join("");
 
-    try {
-      const baseDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
-      if (!baseDir) {
-        throw new Error("Dosya sistemi bulunamadı.");
-      }
-      const filename =
-        kind === "RESIGN"
-          ? "istifa-dilekcesi"
-          : kind === "JUST_CAUSE"
-            ? "hakli-fesih-dilekcesi"
-            : "mobbing-dilekcesi";
-      const fileUri = `${baseDir}${filename}-${today.getFullYear()}${`${today.getMonth() + 1}`.padStart(2, "0")}${`${today.getDate()}`.padStart(2, "0")}.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, content, { encoding: FileSystem.EncodingType.UTF8 });
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: "text/plain",
-          dialogTitle: "Dilekçe İndir / Paylaş",
-          UTI: "public.plain-text"
-        });
-      } else {
-        Alert.alert("Dosya hazır", fileUri);
-      }
-    } catch (error) {
-      Alert.alert("Dilekçe", error instanceof Error ? error.message : "Dilekçe oluşturulamadı.");
-    }
+    await sharePdf(html, "?stifa PDF ?ndir");
   };
 
   if (!loaded) {
     return (
       <SafeAreaView style={[styles.centered, Platform.OS === "android" ? styles.androidTopInset : null]}>
-        <ExpoStatusBar style="dark" />
+        <ExpoStatusBar style={effectiveDarkMode ? "light" : "dark"} />
         <ActivityIndicator size="large" color="#0f766e" />
         <Text style={styles.helper}>Veriler yükleniyor...</Text>
       </SafeAreaView>
@@ -1091,130 +1291,173 @@ export default function App() {
   if (!authUser) {
     return (
       <SafeAreaView style={[styles.container, Platform.OS === "android" ? styles.androidTopInset : null]}>
-        <ExpoStatusBar style="dark" />
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Giriş / Kayıt</Text>
-            <Text style={styles.helper}>Admin için ayrı buton yoktur; yetkili hesap normal girişten yönetim moduna geçer.</Text>
-            <View style={styles.tabRow}>
-              <TabButton label="Kullanıcı Giriş" active={authMode === "USER_LOGIN"} onPress={() => setAuthMode("USER_LOGIN")} />
-              <TabButton label="Kayıt Ol" active={authMode === "USER_REGISTER"} onPress={() => setAuthMode("USER_REGISTER")} />
-            </View>
+        <ExpoStatusBar style={effectiveDarkMode ? "light" : "dark"} />
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
+        >
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <View style={styles.section}>
+              <Text style={styles.brandTitle}>AYFSOFT</Text>
+              <Text style={styles.subtitle}>Puantaj ve Maa? Takip Uygulamas?</Text>
+              <Text style={styles.footerText}>AYFSOFT t?m haklar? sakl?d?r.</Text>
+              <Pressable onPress={() => setLegalModalVisible(true)}>
+                <Text style={styles.linkText}>KVKK, Gizlilik, ?erez, Cihaz Verisi ve Yasal Sorumluluklar</Text>
+              </Pressable>
 
-            <Text style={styles.label}>Kullanıcı adı</Text>
-            <TextInput
-              value={authUsername}
-              onChangeText={(value) => {
-                setAuthUsername(value);
-                clearAuthError();
-              }}
-              autoCapitalize="none"
-              style={styles.input}
-            />
-            <Text style={styles.label}>Şifre</Text>
-            <TextInput
-              value={authPassword}
-              onChangeText={(value) => {
-                setAuthPassword(value);
-                clearAuthError();
-              }}
-              secureTextEntry
-              style={styles.input}
-            />
-
-            {authMode === "USER_REGISTER" ? (
-              <View style={styles.summaryCard}>
-                <Text style={styles.label}>Kayıt Anahtarı</Text>
-                <TextInput
-                  value={authInviteKey}
-                  onChangeText={(value) => {
-                    setAuthInviteKey(value);
-                    clearAuthError();
-                  }}
-                  secureTextEntry
-                  style={styles.input}
-                />
-
-                <Text style={styles.label}>Zorunlu Yasal Onaylar</Text>
-                <Text style={styles.legalNote}>
-                  Gizlilik Politikası: Uygulama; puantaj, vardiya, saat, ödeme ve kullanıcı hesabı verilerini yalnızca
-                  hizmetin sağlanması amacıyla işler. Veriler yerel depoda ve kullanıcı tarafından etkinleştirilen bulut
-                  altyapısında saklanır. Kullanıcı, doğruluk ve güncellikten sorumludur.
-                </Text>
-                <Text style={styles.legalNote}>
-                  KVKK Aydınlatma: 6698 sayılı Kanun kapsamında veri sorumlusu Yapımcı Yusuf Avşar & AyfSoft PTE olup,
-                  kimlik ve çalışma verileri sözleşmenin ifası, hukuki yükümlülüklerin yerine getirilmesi ve meşru menfaat
-                  sebeplerine dayanarak işlenir. Kullanıcı, KVKK madde 11 kapsamındaki haklarını talep edebilir.
-                </Text>
-                <Text style={styles.legalNote}>
-                  Çerez/Cihaz Verisi: Web ve mobil oturum güvenliği için teknik çerezler, cihaz kimliği, oturum ve hata
-                  kayıtları işlenebilir. Analitik veya performans verileri, servis kalitesi ve güvenlik iyileştirmesi
-                  amacıyla kullanılabilir.
-                </Text>
-                <Text style={styles.legalNote}>
-                  Yasal Sorumluluk: Uygulama hesapları yardımcı niteliktedir; resmi bordro, iş sözleşmesi ve mevzuat
-                  önceliklidir. Kullanıcı, uygulama çıktılarının tek başına hukuki delil olmayabileceğini kabul eder.
-                </Text>
-                <ConsentCheck
-                  checked={consentPrivacy}
-                  onToggle={() => setConsentPrivacy((prev) => !prev)}
-                  text="Gizlilik Politikası'nı okudum ve kabul ediyorum."
-                />
-                <ConsentCheck
-                  checked={consentKvkk}
-                  onToggle={() => setConsentKvkk((prev) => !prev)}
-                  text="KVKK aydınlatma metnini okudum ve açık rıza veriyorum."
-                />
-                <ConsentCheck
-                  checked={consentCookies}
-                  onToggle={() => setConsentCookies((prev) => !prev)}
-                  text="Çerez / cihaz verisi kullanımını kabul ediyorum."
-                />
-                <ConsentCheck
-                  checked={consentLegal}
-                  onToggle={() => setConsentLegal((prev) => !prev)}
-                  text="Yasal sorumluluk metnini okudum, kullanım risklerini kabul ediyorum."
-                />
-                <Text style={styles.legalNote}>
-                  Bu uygulama puantaj ve bordro hesapları için yardımcıdır. Hukuki ve finansal nihai kararlar kullanıcı
-                  sorumluluğundadır. Yapımcı Yusuf Avşar & AyfSoft PTE.
-                </Text>
+              <View style={styles.tabRow}>
+                <TabButton label="Kullan?c? Giri?i" active={authMode === "USER_LOGIN"} onPress={() => setAuthMode("USER_LOGIN")} />
+                <TabButton label="Kay?t Ol" active={authMode === "USER_REGISTER"} onPress={() => setAuthMode("USER_REGISTER")} />
               </View>
-            ) : null}
 
-            {authError ? <Text style={styles.error}>{authError}</Text> : null}
+              <Text style={styles.label}>Kullan?c? ad?</Text>
+              <TextInput
+                ref={usernameInputRef}
+                value={authUsername}
+                onChangeText={(value) => {
+                  setAuthUsername(value);
+                  clearAuthError();
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.input}
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
+                blurOnSubmit={false}
+              />
 
-            {authMode === "USER_REGISTER" ? (
-              <Pressable style={styles.secondaryButton} onPress={handleRegister} disabled={authBusy}>
-                <Text style={styles.secondaryButtonText}>{authBusy ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Text>
+              <Text style={styles.label}>?ifre</Text>
+              <TextInput
+                ref={passwordInputRef}
+                value={authPassword}
+                onChangeText={(value) => {
+                  setAuthPassword(value);
+                  clearAuthError();
+                }}
+                secureTextEntry
+                style={styles.input}
+                returnKeyType={authMode === "USER_REGISTER" ? "next" : "go"}
+                onSubmitEditing={() => {
+                  if (authMode === "USER_REGISTER") {
+                    inviteKeyInputRef.current?.focus();
+                    return;
+                  }
+                  void handleLogin();
+                }}
+                blurOnSubmit={authMode !== "USER_REGISTER"}
+              />
+
+              {authMode === "USER_REGISTER" ? (
+                <View style={styles.summaryCard}>
+                  <Text style={styles.label}>Kay?t anahtar?</Text>
+                  <TextInput
+                    ref={inviteKeyInputRef}
+                    value={authInviteKey}
+                    onChangeText={(value) => {
+                      setAuthInviteKey(value);
+                      clearAuthError();
+                    }}
+                    secureTextEntry
+                    style={styles.input}
+                    returnKeyType="done"
+                    onSubmitEditing={() => void handleRegister()}
+                  />
+
+                  <Text style={styles.label}>Zorunlu onaylar</Text>
+                  <ConsentCheck
+                    checked={consentKvkk}
+                    onToggle={() => setConsentKvkk((prev) => !prev)}
+                    text="KVKK Ayd?nlatma Metni'ni okudum ve kabul ediyorum."
+                  />
+                  <ConsentCheck
+                    checked={consentAcikRiza}
+                    onToggle={() => setConsentAcikRiza((prev) => !prev)}
+                    text="A??k R?za Metni'ni onayl?yorum."
+                  />
+                  <ConsentCheck
+                    checked={consentGizlilik}
+                    onToggle={() => setConsentGizlilik((prev) => !prev)}
+                    text="Gizlilik Politikas?'n? okudum ve kabul ediyorum."
+                  />
+                  <ConsentCheck
+                    checked={consentCerez}
+                    onToggle={() => setConsentCerez((prev) => !prev)}
+                    text="?erez Politikas?'n? kabul ediyorum."
+                  />
+                  <ConsentCheck
+                    checked={consentCihazVerisi}
+                    onToggle={() => setConsentCihazVerisi((prev) => !prev)}
+                    text="Cihaz Verisi Politikas?'n? kabul ediyorum."
+                  />
+                  <ConsentCheck
+                    checked={consentYasalSorumluluk}
+                    onToggle={() => setConsentYasalSorumluluk((prev) => !prev)}
+                    text="Yasal Sorumluluk Reddi ve Kullan?m ?artlar?'n? kabul ediyorum."
+                  />
+
+                  <Pressable onPress={() => setLegalModalVisible(true)}>
+                    <Text style={styles.linkText}>Metinleri detayl? incele</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {authError ? <Text style={styles.error}>{authError}</Text> : null}
+
+              {authMode === "USER_REGISTER" ? (
+                <Pressable style={styles.secondaryButton} onPress={handleRegister} disabled={authBusy}>
+                  <Text style={styles.secondaryButtonText}>{authBusy ? "Kay?t yap?l?yor..." : "Kay?t Ol"}</Text>
+                </Pressable>
+              ) : (
+                <Pressable style={styles.secondaryButton} onPress={handleLogin} disabled={authBusy}>
+                  <Text style={styles.secondaryButtonText}>{authBusy ? "Giri? yap?l?yor..." : "Giri? Yap"}</Text>
+                </Pressable>
+              )}
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        <Modal visible={legalModalVisible} transparent animationType="slide" onRequestClose={() => setLegalModalVisible(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalCard, { maxHeight: "90%" }]}>
+              <Text style={styles.modalTitle}>Hukuk Bilgilendirme Metinleri</Text>
+              <ScrollView>
+                {LEGAL_SECTIONS.map((section) => (
+                  <View key={section.id} style={styles.legalSectionCard}>
+                    <Pressable style={styles.row} onPress={() => toggleLegalSection(section.id)}>
+                      <Text style={styles.label}>{section.title}</Text>
+                      <Text style={styles.label}>{openLegalSectionMap[section.id] ? "-" : "+"}</Text>
+                    </Pressable>
+                    {openLegalSectionMap[section.id] ? <Text style={styles.legalNote}>{section.content}</Text> : null}
+                  </View>
+                ))}
+                <Text style={styles.legalWarning}>
+                  Bu uygulamadaki bilgiler bilgilendirme ama?l?d?r. Resm? hukuki dan??manl?k yerine ge?mez.
+                </Text>
+              </ScrollView>
+              <Pressable style={styles.secondaryButton} onPress={() => setLegalModalVisible(false)}>
+                <Text style={styles.secondaryButtonText}>Kapat</Text>
               </Pressable>
-            ) : (
-              <Pressable style={styles.secondaryButton} onPress={handleLogin} disabled={authBusy}>
-                <Text style={styles.secondaryButtonText}>{authBusy ? "Giriş yapılıyor..." : "Giriş Yap"}</Text>
-              </Pressable>
-            )}
+            </View>
           </View>
-        </ScrollView>
+        </Modal>
       </SafeAreaView>
     );
   }
 
-  return (
+return (
     <SafeAreaView style={[styles.container, Platform.OS === "android" ? styles.androidTopInset : null]}>
-      <ExpoStatusBar style="dark" />
+      <ExpoStatusBar style={effectiveDarkMode ? "light" : "dark"} />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Puantaj Maaş Hesap</Text>
-        <Text style={styles.subtitle}>Takvim Üzerinden Günlük Kayıt ve Aylık Hesaplama</Text>
+        <Text style={styles.title}>Puantaj Maa? Hesap</Text>
+        <Text style={styles.subtitle}>Takvim ?zerinden g?nl?k kay?t ve ayl?k hesaplama</Text>
         <View style={styles.row}>
-          <Text style={styles.helper}>
-            {authUser.role === "ADMIN" ? "Yönetici" : "Kullanıcı"}: {authUser.username}
-          </Text>
+          <Text style={styles.helper}>{authUser.role === "ADMIN" ? "Y?netici" : "Kullan?c?"}: {authUser.username}</Text>
           <Pressable style={styles.deleteButton} onPress={handleLogout}>
-            <Text style={styles.deleteButtonText}>Çıkış</Text>
+            <Text style={styles.deleteButtonText}>??k??</Text>
           </Pressable>
         </View>
-        <Text style={styles.helper}>Backend: {backendConnected ? "Bağlı" : "Çevrimdışı / Kısmi"} | API: {getApiBaseUrl()}</Text>
         <View style={styles.saveTextSlot}>
           <Text style={[styles.saveText, !saving ? styles.saveTextHidden : null]}>Kaydediliyor...</Text>
         </View>
@@ -1222,12 +1465,12 @@ export default function App() {
 
       <View style={styles.tabRow}>
         <TabButton label="Takvim" active={activeTab === "CALENDAR"} onPress={() => setActiveTab("CALENDAR")} />
-        <TabButton label="Özet" active={activeTab === "SUMMARY"} onPress={() => setActiveTab("SUMMARY")} />
+        <TabButton label="?zet" active={activeTab === "SUMMARY"} onPress={() => setActiveTab("SUMMARY")} />
         <TabButton label="Ayarlar" active={activeTab === "SETTINGS"} onPress={() => setActiveTab("SETTINGS")} />
-        <TabButton label="Bulut" active={activeTab === "CLOUD"} onPress={() => setActiveTab("CLOUD")} />
+        <TabButton label="Senkronizasyon" active={activeTab === "SYNC"} onPress={() => setActiveTab("SYNC")} />
         <TabButton label="Hukuk" active={activeTab === "LEGAL"} onPress={() => setActiveTab("LEGAL")} />
         {authUser.role === "ADMIN" ? (
-          <TabButton label="CPanel" active={activeTab === "CPANEL"} onPress={() => setActiveTab("CPANEL")} />
+          <TabButton label="Kullanıcılar" active={activeTab === "USERS"} onPress={() => setActiveTab("USERS")} />
         ) : null}
       </View>
 
@@ -1711,34 +1954,32 @@ export default function App() {
           </View>
         ) : null}
 
-        {activeTab === "CLOUD" ? (
+        {activeTab === "SYNC" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Bulut / Backend</Text>
+            <Text style={styles.sectionTitle}>Senkronizasyon</Text>
             <Text style={styles.helper}>
-              Kritik işlemler backend üzerinden çalışır. Mobil uygulama sadece API ile haberleşir; veritabanı ve admin
-              gizlileri APK içinde tutulmaz.
+              Uygulama verileri g?venli ?ekilde e?itlenir. Teknik ayr?nt?lar kullan?c?ya g?sterilmez.
             </Text>
 
-            <InfoRow label="API URL" value={getApiBaseUrl()} />
-            <InfoRow label="Bağlantı durumu" value={backendConnected ? "Bağlı" : "Kısmi / Çevrimdışı"} />
+            <InfoRow label="Ba?lant? durumu" value={backendConnected ? "Ba?l?" : "K?smi / ?evrimd???"} />
             <Text style={styles.helper}>
-              Backend bağlantısı geçici olarak kesilirse uygulama yerelde çalışmaya devam eder, bağlantı gelince veri
-              tekrar senkronlanır.
+              Ba?lant? ge?ici olarak kesilirse uygulama yerelde ?al??maya devam eder, ba?lant? yeniden kurulunca veriler
+              otomatik e?itlenir.
             </Text>
             <Pressable
               style={styles.secondaryButton}
               onPress={async () => {
                 const ok = await pingBackend();
                 setBackendConnected(ok);
-                Alert.alert("Bağlantı kontrolü", ok ? "Backend erişilebilir." : "Backend erişilemiyor.");
+                Alert.alert("Ba?lant? kontrol?", ok ? "Ba?lant? ba?ar?l?." : "??lem ger?ekle?tirilemedi, l?tfen tekrar deneyin.");
               }}
             >
-              <Text style={styles.secondaryButtonText}>Backend Bağlantısını Test Et</Text>
+              <Text style={styles.secondaryButtonText}>Ba?lant?y? Test Et</Text>
             </Pressable>
           </View>
         ) : null}
 
-        {activeTab === "CPANEL" && authUser.role === "ADMIN" ? (
+        {activeTab === "USERS" && authUser.role === "ADMIN" ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Yönetim Paneli</Text>
             <Text style={styles.helper}>
@@ -1877,92 +2118,62 @@ export default function App() {
         {activeTab === "LEGAL" ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Hukuk</Text>
-            <Text style={styles.error}>
-              Bu bölüm bilgilendirme amaçlıdır. Kesin hesap ve hukuki değerlendirme için uzman/avukat/muhasebeci desteği
-              alınmalıdır.
+
+            {LEGAL_SECTIONS.map((section) => (
+              <View key={section.id} style={styles.legalSectionCard}>
+                <Pressable style={styles.row} onPress={() => toggleLegalSection(section.id)}>
+                  <Text style={styles.label}>{section.title}</Text>
+                  <Text style={styles.label}>{openLegalSectionMap[section.id] ? "-" : "+"}</Text>
+                </Pressable>
+                {openLegalSectionMap[section.id] ? <Text style={styles.legalNote}>{section.content}</Text> : null}
+              </View>
+            ))}
+
+            <Text style={styles.legalWarning}>
+              Bu uygulamadaki bilgiler bilgilendirme ama?l?d?r. Resm? hukuki dan??manl?k yerine ge?mez.
             </Text>
 
-            <SummaryCard title="Temel Bilgiler">
-              <Text style={styles.legalNote}>
-                Fazla mesai nedir?: Haftalık yasal süreyi aşan çalışmalar için saatlik ücretin katsayılı karşılığıdır.
-              </Text>
-              <Text style={styles.legalNote}>
-                UBGT nedir?: Ulusal bayram ve genel tatil günlerinde çalışma halinde ek ücret doğuran gün türüdür.
-              </Text>
-              <Text style={styles.legalNote}>
-                Pazar çalışması nedir?: Hafta tatilinde çalışma halinde sözleşme/mevzuata göre ilave ücret doğurabilir.
-              </Text>
-              <Text style={styles.legalNote}>
-                Raporlu gün kesintisi nedir?: Raporlu günlerde bordro kurallarına göre ücrette kesinti veya farklı ödeme
-                oluşabilir.
-              </Text>
-              <Text style={styles.legalNote}>
-                Yıllık izin nedir?: Hizmet süresine bağlı olarak kazanılan ücretli izin hakkıdır.
-              </Text>
-              <Text style={styles.legalNote}>
-                İhbar tazminatı nedir?: Bildirim süresine uyulmaması halinde doğabilen tazminat kalemidir.
-              </Text>
-              <Text style={styles.legalNote}>
-                Kıdem tazminatı nedir?: Belirli şartlarla en az bir yıllık hizmet sonrası doğan tazminat hakkıdır.
-              </Text>
-            </SummaryCard>
-
-            <SummaryCard title="KVKK / Gizlilik / Çerez">
-              <Text style={styles.legalNote}>
-                Bu uygulama; kullanıcı hesabı, puantaj kayıtları, vardiya saatleri, ödeme kalemleri, cihaz tipi, IP ve
-                güvenlik loglarını hizmetin güvenli sunulması amacıyla işleyebilir. İşlenen veriler, veri minimizasyonu
-                ilkesi kapsamında yalnızca gerekli süre boyunca saklanır. Kullanıcı verileri mevzuat, sözleşme ifası,
-                meşru menfaat ve açık rıza hukuki sebepleriyle işlenir.
-              </Text>
-              <Text style={styles.legalNote}>
-                KVKK kapsamında kullanıcı; veriye erişim, düzeltme, silme, işleme itiraz, aktarım bilgisi talep etme ve
-                zarar halinde tazmin talebi dahil haklarını kullanabilir. Başvurular yazılı veya doğrulanmış dijital
-                yöntemle yapılmalıdır. Sistem güvenliği için anti-fraud, oturum yönetimi, rate limit ve audit log
-                kontrolleri kullanılabilir.
-              </Text>
-              <Text style={styles.legalNote}>
-                Çerez ve benzeri teknikler; yalnızca oturum güvenliği, yetkilendirme ve performans amaçlarıyla
-                kullanılabilir. Üçüncü taraf analitik servisleri devreye alınırsa kullanıcıya ayrıca bilgilendirme
-                yapılmalıdır. Bu metin bilgilendirme niteliğindedir ve bağlayıcı hukuki görüş yerine geçmez.
-              </Text>
-            </SummaryCard>
-
-            <SummaryCard title="Dilekçe Şablonları">
-              <Text style={styles.helper}>
-                Şablonlar otomatik olarak kullanıcı adı ve tarih ile doldurulur. İndirmeden önce somut olay bilgilerini
-                kontrol edin.
-              </Text>
+            <SummaryCard title="?stifa Dilek?esi ?rnekleri">
               <View style={styles.optionWrap}>
-                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("RESIGN")}>
-                  <Text style={styles.optionButtonText}>İstifa İndir</Text>
+                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("NORMAL")}>
+                  <Text style={styles.optionButtonText}>Normal</Text>
                 </Pressable>
-                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("JUST_CAUSE")}>
-                  <Text style={styles.optionButtonText}>Haklı Fesih İndir</Text>
+                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("HAKLI_FESIH")}>
+                  <Text style={styles.optionButtonText}>Hakl? Fesih</Text>
+                </Pressable>
+                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("ASKERLIK")}>
+                  <Text style={styles.optionButtonText}>Askerlik</Text>
+                </Pressable>
+                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("EVLILIK")}>
+                  <Text style={styles.optionButtonText}>Evlilik</Text>
                 </Pressable>
                 <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("MOBBING")}>
-                  <Text style={styles.optionButtonText}>Mobbing İndir</Text>
+                  <Text style={styles.optionButtonText}>Mobbing</Text>
+                </Pressable>
+                <Pressable style={styles.optionButton} onPress={() => downloadLegalTemplate("MAAS_ODENMEMESI")}>
+                  <Text style={styles.optionButtonText}>Maa? ?denmemesi</Text>
                 </Pressable>
               </View>
             </SummaryCard>
 
-            <SummaryCard title="Yıllık İzin / İhbar / Kıdem Hesaplama">
-              <Text style={styles.label}>İşe giriş tarihi (YYYY-MM-DD)</Text>
+            <SummaryCard title="Y?ll?k ?zin / ?hbar / K?dem Hesaplama">
+              <Text style={styles.label}>??e giri? tarihi (01.01.2025)</Text>
               <TextInput
                 value={appData.legal.hireDate}
                 onChangeText={(value) => setLegalField("hireDate", value)}
-                autoCapitalize="none"
+                keyboardType="number-pad"
                 style={styles.input}
               />
 
-              <Text style={styles.label}>İşten çıkış tarihi (YYYY-MM-DD, boşsa bugün)</Text>
+              <Text style={styles.label}>??ten ??k?? tarihi (01.01.2026)</Text>
               <TextInput
                 value={appData.legal.terminationDate}
                 onChangeText={(value) => setLegalField("terminationDate", value)}
-                autoCapitalize="none"
+                keyboardType="number-pad"
                 style={styles.input}
               />
 
-              <Text style={styles.label}>Brüt ücret</Text>
+              <Text style={styles.label}>Br?t ?cret</Text>
               <TextInput
                 value={String(appData.legal.grossSalary)}
                 onChangeText={(value) => setLegalField("grossSalary", value)}
@@ -1970,7 +2181,7 @@ export default function App() {
                 style={styles.input}
               />
 
-              <Text style={styles.label}>Kullanılmayan yıllık izin günü</Text>
+              <Text style={styles.label}>Kullan?lmayan y?ll?k izin g?n?</Text>
               <TextInput
                 value={String(appData.legal.unusedAnnualLeaveDays)}
                 onChangeText={(value) => setLegalField("unusedAnnualLeaveDays", value)}
@@ -1994,14 +2205,14 @@ export default function App() {
               </View>
             </SummaryCard>
 
-            <SummaryCard title="Hesap Sonuçları">
-              <InfoRow label="Çalışma süresi" value={`${legalResult.serviceDays} gün (${legalResult.serviceYears} yıl)`} />
-              <InfoRow label="Yaklaşık kıdem tazminatı" value={formatCurrency(legalResult.severancePay)} />
-              <InfoRow label="Yaklaşık ihbar süresi" value={`${legalResult.noticeWeeks} hafta`} />
-              <InfoRow label="Yaklaşık ihbar tazminatı" value={formatCurrency(legalResult.noticePay)} />
-              <InfoRow label="Hak edilen yıllık izin" value={`${legalResult.annualLeaveEntitled} gün`} />
-              <InfoRow label="Kullanılmayan izin" value={`${legalResult.annualLeaveRemaining} gün`} />
-              <InfoRow label="Kullanılmayan yıllık izin ücreti" value={formatCurrency(legalResult.annualLeavePay)} />
+            <SummaryCard title="Hesap Sonu?lar?">
+              <InfoRow label="?al??ma s?resi" value={legalResult.serviceText} />
+              <InfoRow label="Yakla??k k?dem tazminat?" value={formatCurrency(legalResult.severancePayNet)} />
+              <InfoRow label="Yakla??k ihbar s?resi" value={`${legalResult.noticeWeeks} hafta`} />
+              <InfoRow label="Yakla??k ihbar tazminat?" value={formatCurrency(legalResult.noticePay)} />
+              <InfoRow label="Hak edilen y?ll?k izin" value={`${legalResult.annualLeaveEntitled} g?n`} />
+              <InfoRow label="Kullan?lmayan izin" value={`${legalResult.annualLeaveRemaining} g?n`} />
+              <InfoRow label="Kullan?lmayan y?ll?k izin ?creti" value={formatCurrency(legalResult.annualLeavePay)} />
               <InfoRow label="Tahmini toplam" value={formatCurrency(legalResult.estimatedTotal)} strong />
             </SummaryCard>
           </View>
@@ -2009,7 +2220,7 @@ export default function App() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>AyfSoft Yusuf Avşar Hakları Saklıdır</Text>
+        <Text style={styles.footerText}>AyfSoft - Tum Haklari Saklidir</Text>
       </View>
 
       <Modal visible={statusModalVisible} transparent animationType="fade" onRequestClose={() => setStatusModalVisible(false)}>
@@ -2377,10 +2588,23 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#0f172a"
   },
+  brandTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+    letterSpacing: 1,
+    color: "#0f766e",
+    textAlign: "center"
+  },
   label: {
     fontSize: 13,
     color: "#334155",
     fontWeight: "700"
+  },
+  linkText: {
+    fontSize: 12,
+    color: "#0f766e",
+    fontWeight: "700",
+    textDecorationLine: "underline"
   },
   input: {
     borderWidth: 1,
@@ -2596,6 +2820,24 @@ const styles = StyleSheet.create({
     color: "#334155",
     lineHeight: 18
   },
+  legalSectionCard: {
+    borderWidth: 1,
+    borderColor: "#dbe4ee",
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    padding: 10,
+    gap: 8
+  },
+  legalWarning: {
+    fontSize: 12,
+    color: "#9a3412",
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fdba74",
+    borderRadius: 10,
+    padding: 10,
+    lineHeight: 18
+  },
   detailRowText: {
     fontSize: 12,
     color: "#1f2937",
@@ -2607,3 +2849,5 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   }
 });
+
+

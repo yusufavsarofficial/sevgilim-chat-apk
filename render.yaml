@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: sevgilim-chat
+    name: puantaj-maas-backend
     runtime: node
     rootDir: backend
     buildCommand: npm install && npm run build
@@ -19,11 +19,11 @@ services:
         value: 30d
       - key: ADMIN_USERNAME
         sync: false
-      - key: ADMIN_PASSWORD
+      - key: ADMIN_PASSWORD_HASH
         sync: false
-      - key: REGISTER_INVITE_KEY
+      - key: REGISTER_INVITE_KEY_HASH
         sync: false
       - key: PORT
         value: 3000
       - key: CORS_ORIGIN
-        value: https://sevgilim-chat.onrender.com,http://localhost:8081
+        value: https://puantaj-maas-api.onrender.com,http://localhost:8081,http://localhost:19006

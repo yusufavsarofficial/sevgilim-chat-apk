@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+﻿import { NextFunction, Request, Response } from "express";
 import { query } from "../db.js";
 import { hashToken } from "../utils/security.js";
 import { verifyJwt } from "../utils/tokens.js";
@@ -12,8 +12,8 @@ type AuthRow = {
   session_id: string;
 };
 
-function unauthorized(res: Response, message: string): void {
-  res.status(401).json({ error: message });
+function unauthorized(res: Response): void {
+  res.status(401).json({ error: "Oturum doğrulanamadı. Lütfen yeniden giriş yapın." });
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -21,14 +21,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
 
   if (!token) {
-    unauthorized(res, "Yetkisiz erişim.");
+    unauthorized(res);
     return;
   }
 
   try {
     const payload = verifyJwt(token);
     if (payload.type !== "access") {
-      unauthorized(res, "Geçersiz oturum türü.");
+      unauthorized(res);
       return;
     }
 
@@ -54,7 +54,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     );
 
     if (rows.length === 0) {
-      unauthorized(res, "Oturum süresi doldu veya geçersiz.");
+      unauthorized(res);
       return;
     }
 
@@ -65,7 +65,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     if (row.is_banned) {
-      res.status(403).json({ error: "Hesap banlı durumda." });
+      res.status(403).json({ error: "Hesap kullanıma kapatıldı." });
       return;
     }
 
@@ -75,7 +75,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         [req.clientIpAddress]
       );
       if (bannedIps.length > 0) {
-        res.status(403).json({ error: "IP erişimi kısıtlandı." });
+        res.status(403).json({ error: "Bu cihaz için erişim kısıtlandı." });
         return;
       }
     }
@@ -90,13 +90,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     next();
   } catch {
-    unauthorized(res, "Geçersiz token.");
+    unauthorized(res);
   }
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   if (!req.auth || req.auth.role !== "ADMIN") {
-    res.status(403).json({ error: "Bu işlem için admin yetkisi gerekiyor." });
+    res.status(403).json({ error: "Bu işlem için yönetici yetkisi gerekir." });
     return;
   }
   next();

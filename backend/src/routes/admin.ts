@@ -1,11 +1,23 @@
+﻿import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
 import { query } from "../db.js";
 import { createAuditLog } from "../utils/audit.js";
+import { normalizeUsername } from "../utils/security.js";
 
 const userIdParamSchema = z.object({ id: z.string().uuid() });
 const banSchema = z.object({ reason: z.string().min(1).max(500) });
 const ipBanSchema = z.object({ ipAddress: z.string().min(3).max(120), reason: z.string().max(500).optional() });
+const createUserSchema = z.object({
+  username: z.string().min(3).max(40),
+  password: z.string().min(6).max(120),
+  role: z.enum(["USER", "ADMIN"]).default("USER")
+});
+const updateUserSchema = z.object({
+  username: z.string().min(3).max(40).optional(),
+  password: z.string().min(6).max(120).optional(),
+  role: z.enum(["USER", "ADMIN"]).optional()
+});
 
 function toUserDetail(row: {
   id: string;
@@ -112,6 +124,131 @@ adminRouter.get("/users", async (req, res) => {
   );
 
   res.json({ users: rows.map(toUserDetail) });
+});
+
+adminRouter.post("/users", async (req, res) => {
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Kullanıcı bilgileri geçersiz." });
+    return;
+  }
+
+  const username = normalizeUsername(parsed.data.username);
+  const existing = await query<{ id: string }>(`SELECT id FROM users WHERE username = $1 LIMIT 1`, [username]);
+  if (existing.length > 0) {
+    res.status(409).json({ error: "Bu kullanıcı adı zaten kayıtlı." });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  const inserted = await query<{ id: string }>(
+    `
+      INSERT INTO users (username, password_hash, role, is_active, is_banned)
+      VALUES ($1, $2, $3, TRUE, FALSE)
+      RETURNING id
+    `,
+    [username, passwordHash, parsed.data.role]
+  );
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "USER_CREATE",
+    targetUserId: inserted[0]?.id ?? null,
+    ipAddress: req.clientIpAddress,
+    details: { username, role: parsed.data.role }
+  });
+
+  res.status(201).json({ success: true });
+});
+
+adminRouter.patch("/users/:id", async (req, res) => {
+  const idParsed = userIdParamSchema.safeParse(req.params);
+  const bodyParsed = updateUserSchema.safeParse(req.body);
+  if (!idParsed.success || !bodyParsed.success) {
+    res.status(400).json({ error: "Güncelleme bilgileri geçersiz." });
+    return;
+  }
+
+  const userId = idParsed.data.id;
+  const payload = bodyParsed.data;
+
+  const currentRows = await query<{ id: string; role: "ADMIN" | "USER" }>(`SELECT id, role FROM users WHERE id = $1 LIMIT 1`, [
+    userId
+  ]);
+
+  if (currentRows.length === 0) {
+    res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    return;
+  }
+
+  if (payload.username) {
+    const normalized = normalizeUsername(payload.username);
+    const duplicate = await query<{ id: string }>(
+      `SELECT id FROM users WHERE username = $1 AND id <> $2 LIMIT 1`,
+      [normalized, userId]
+    );
+    if (duplicate.length > 0) {
+      res.status(409).json({ error: "Bu kullanıcı adı zaten kullanımda." });
+      return;
+    }
+    await query(`UPDATE users SET username = $2 WHERE id = $1`, [userId, normalized]);
+  }
+
+  if (payload.password) {
+    const passwordHash = await bcrypt.hash(payload.password, 12);
+    await query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [userId, passwordHash]);
+  }
+
+  if (payload.role) {
+    if (req.auth?.userId === userId && payload.role !== "ADMIN") {
+      res.status(400).json({ error: "Kendi yönetici yetkinizi kaldıramazsınız." });
+      return;
+    }
+    await query(`UPDATE users SET role = $2 WHERE id = $1`, [userId, payload.role]);
+  }
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "USER_UPDATE",
+    targetUserId: userId,
+    ipAddress: req.clientIpAddress,
+    details: payload
+  });
+
+  res.json({ success: true });
+});
+
+adminRouter.delete("/users/:id", async (req, res) => {
+  const parsed = userIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Geçersiz kullanıcı kimliği." });
+    return;
+  }
+
+  if (req.auth?.userId === parsed.data.id) {
+    res.status(400).json({ error: "Kendi hesabınızı silemezsiniz." });
+    return;
+  }
+
+  const target = await query<{ id: string; role: "ADMIN" | "USER" }>(`SELECT id, role FROM users WHERE id = $1 LIMIT 1`, [
+    parsed.data.id
+  ]);
+  if (target.length === 0) {
+    res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    return;
+  }
+
+  await query(`DELETE FROM users WHERE id = $1`, [parsed.data.id]);
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "USER_DELETE",
+    targetUserId: parsed.data.id,
+    ipAddress: req.clientIpAddress,
+    details: { role: target[0].role }
+  });
+
+  res.json({ success: true });
 });
 
 adminRouter.get("/users/:id", async (req, res) => {

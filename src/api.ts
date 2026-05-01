@@ -1,9 +1,12 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppData, AuthUser } from "./types";
+import { ConsentBundle } from "./auth";
 
-const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://sevgilim-chat.onrender.com").replace(/\/$/, "");
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://puantaj-maas-api.onrender.com").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "@puantaj-maas-apk:remote:access";
 const REFRESH_TOKEN_KEY = "@puantaj-maas-apk:remote:refresh";
+
+const GENERIC_ERROR = "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
 
 type RemoteUser = {
   id: string;
@@ -58,6 +61,31 @@ function toAuthUser(user: RemoteUser): AuthUser {
     role: user.role,
     createdAt: new Date().toISOString()
   };
+}
+
+function sanitizeErrorMessage(message: string, fallback: string): string {
+  const text = message.trim();
+  if (!text) {
+    return fallback;
+  }
+
+  const technicalKeywords = [
+    "token",
+    "endpoint",
+    "backend",
+    "api",
+    "server",
+    "stack",
+    "request failed",
+    "unauthorized",
+    "jwt"
+  ];
+
+  const lower = text.toLowerCase();
+  if (technicalKeywords.some((item) => lower.includes(item))) {
+    return fallback;
+  }
+  return text;
 }
 
 async function readTokens(): Promise<TokenState | null> {
@@ -122,7 +150,7 @@ async function refreshAccessToken(): Promise<string | null> {
 async function parseError(response: Response, fallback: string): Promise<string> {
   try {
     const payload = (await response.json()) as { error?: string };
-    return payload.error || fallback;
+    return sanitizeErrorMessage(payload.error || "", fallback);
   } catch {
     return fallback;
   }
@@ -172,7 +200,7 @@ export async function remoteRegister(input: {
   username: string;
   password: string;
   inviteKey: string;
-  consents: { privacy: boolean; kvkk: boolean; cookies: boolean; legal: boolean };
+  consents: ConsentBundle;
 }): Promise<AuthUser> {
   const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: "POST",
@@ -183,7 +211,7 @@ export async function remoteRegister(input: {
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kayıt başarısız."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 
   const data = (await response.json()) as {
@@ -206,7 +234,7 @@ export async function remoteLogin(username: string, password: string): Promise<A
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Giriş başarısız."));
+    throw new Error(await parseError(response, "Kullanıcı adı veya şifre hatalı."));
   }
 
   const data = (await response.json()) as {
@@ -262,7 +290,7 @@ export async function remoteLogout(): Promise<void> {
 export async function pullPayrollFromBackend(): Promise<AppData | null> {
   const response = await authorizedFetch("/api/payroll", { method: "GET" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Buluttan veri alınamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 
   const data = (await response.json()) as { data: AppData | null };
@@ -276,7 +304,7 @@ export async function pushPayrollToBackend(data: AppData): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Buluta veri kaydedilemedi."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
@@ -293,14 +321,14 @@ export async function sendSecuritySignal(payload: {
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Güvenlik sinyali iletilemedi."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
 export async function adminGetStats(): Promise<AdminStats> {
   const response = await authorizedFetch("/api/admin/stats", { method: "GET" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Admin istatistikleri alınamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
   return (await response.json()) as AdminStats;
 }
@@ -309,7 +337,7 @@ export async function adminGetUsers(search = ""): Promise<AdminUser[]> {
   const suffix = search.trim() ? `?q=${encodeURIComponent(search.trim())}` : "";
   const response = await authorizedFetch(`/api/admin/users${suffix}`, { method: "GET" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kullanıcı listesi alınamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
   const data = (await response.json()) as { users: AdminUser[] };
   return data.users;
@@ -318,9 +346,39 @@ export async function adminGetUsers(search = ""): Promise<AdminUser[]> {
 export async function adminGetUserDetail(userId: string): Promise<AdminUserDetail> {
   const response = await authorizedFetch(`/api/admin/users/${userId}`, { method: "GET" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kullanıcı detayı alınamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
   return (await response.json()) as AdminUserDetail;
+}
+
+export async function adminCreateUser(payload: { username: string; password: string; role: "USER" | "ADMIN" }): Promise<void> {
+  const response = await authorizedFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
+}
+
+export async function adminUpdateUser(
+  userId: string,
+  payload: { username?: string; password?: string; role?: "USER" | "ADMIN" }
+): Promise<void> {
+  const response = await authorizedFetch(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
+}
+
+export async function adminDeleteUser(userId: string): Promise<void> {
+  const response = await authorizedFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
 }
 
 export async function adminBanUser(userId: string, reason: string): Promise<void> {
@@ -329,41 +387,41 @@ export async function adminBanUser(userId: string, reason: string): Promise<void
     body: JSON.stringify({ reason })
   });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kullanıcı banlanamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
 export async function adminUnbanUser(userId: string): Promise<void> {
   const response = await authorizedFetch(`/api/admin/users/${userId}/unban`, { method: "POST" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Ban kaldırılamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
 export async function adminDisableUser(userId: string): Promise<void> {
   const response = await authorizedFetch(`/api/admin/users/${userId}/disable`, { method: "POST" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kullanıcı pasif yapılamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
 export async function adminEnableUser(userId: string): Promise<void> {
   const response = await authorizedFetch(`/api/admin/users/${userId}/enable`, { method: "POST" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kullanıcı aktif yapılamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
 export async function adminDeleteUserData(userId: string): Promise<void> {
   const response = await authorizedFetch(`/api/admin/users/${userId}/data`, { method: "DELETE" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Kullanıcı verisi silinemedi."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
 
 export async function adminRevokeUserSessions(userId: string): Promise<void> {
   const response = await authorizedFetch(`/api/admin/users/${userId}/revoke-sessions`, { method: "POST" });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Oturumlar sonlandırılamadı."));
+    throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }

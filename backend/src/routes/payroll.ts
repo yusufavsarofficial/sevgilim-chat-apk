@@ -40,7 +40,7 @@ payrollRouter.post("/", async (req, res) => {
 
   const parsed = payrollSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Geçersiz payroll verisi." });
+    res.status(400).json({ error: "Geçersiz puantaj verisi." });
     return;
   }
 

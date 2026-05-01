@@ -3,11 +3,22 @@ import {
   createWorkedRecord,
   DEFAULT_DATA,
   isIsoDate,
+  maskTrDateInput,
   normalizeMonthPayment,
   safePositive,
   tryParseNumber
 } from "./payroll";
-import { AppData, DayRecord, DayStatus, LegalSettings, ShiftRecord, TerminationType } from "./types";
+import {
+  AppData,
+  DayRecord,
+  DayStatus,
+  LegalSettings,
+  ResignationForm,
+  ResignationTemplateKey,
+  ShiftRecord,
+  TerminationType,
+  ThemePreference
+} from "./types";
 
 const STORAGE_KEY_PREFIX = "@puantaj-maas-apk:data:v3";
 const LEGACY_KEYS = ["@puantaj-maas-apk:data:v2", "@puantaj-maas-apk:data:v1"];
@@ -19,6 +30,13 @@ function normalizeStatus(value: unknown): DayStatus | null {
   if (value === "REPORT") return "REPORT";
   if (value === "HOLIDAY_OFF") return "HOLIDAY_OFF";
   return null;
+}
+
+function normalizeThemePreference(value: unknown): ThemePreference {
+  if (value === "SYSTEM" || value === "LIGHT" || value === "DARK") {
+    return value;
+  }
+  return "SYSTEM";
 }
 
 function legacyShiftHours(shift: ShiftRecord): { totalHours: number; overtimeHours: number } {
@@ -89,13 +107,60 @@ function normalizeTerminationType(value: unknown): TerminationType {
   return "EMPLOYER_TERMINATION";
 }
 
+function normalizeResignationTemplate(value: unknown): ResignationTemplateKey {
+  const valid: ResignationTemplateKey[] = [
+    "STANDARD",
+    "NOTICE_WITH",
+    "NOTICE_WITHOUT",
+    "RETIREMENT",
+    "MARRIAGE",
+    "HEALTH",
+    "SALARY_UNPAID",
+    "OVERTIME_UNPAID",
+    "MOBBING",
+    "MILITARY",
+    "PROBATION",
+    "WORK_CONDITION_CHANGE"
+  ];
+  if (typeof value === "string" && valid.includes(value as ResignationTemplateKey)) {
+    return value as ResignationTemplateKey;
+  }
+  return "STANDARD";
+}
+
+function normalizeResignationForm(raw: unknown): ResignationForm {
+  const fallback = DEFAULT_DATA.legal.resignationForm;
+  if (!raw || typeof raw !== "object") {
+    return { ...fallback };
+  }
+
+  const source = raw as Partial<ResignationForm>;
+  return {
+    fullName: typeof source.fullName === "string" ? source.fullName : fallback.fullName,
+    tcNo: typeof source.tcNo === "string" ? source.tcNo : fallback.tcNo,
+    companyName: typeof source.companyName === "string" ? source.companyName : fallback.companyName,
+    department: typeof source.department === "string" ? source.department : fallback.department,
+    hireDate: typeof source.hireDate === "string" ? maskTrDateInput(source.hireDate) : fallback.hireDate,
+    leaveDate: typeof source.leaveDate === "string" ? maskTrDateInput(source.leaveDate) : fallback.leaveDate,
+    letterDate: typeof source.letterDate === "string" ? maskTrDateInput(source.letterDate) : fallback.letterDate,
+    address: typeof source.address === "string" ? source.address : fallback.address,
+    explanation: typeof source.explanation === "string" ? source.explanation : fallback.explanation
+  };
+}
+
 function normalizeLegalSettings(raw: unknown): LegalSettings {
   const fallback = DEFAULT_DATA.legal;
   if (!raw || typeof raw !== "object") {
     return { ...fallback };
   }
 
-  const source = raw as Partial<LegalSettings> & { usedAnnualLeaveDays?: number };
+  const source = raw as Partial<LegalSettings> & {
+    usedAnnualLeaveDays?: number;
+    dailyMealAid?: number;
+    dailyTransportAid?: number;
+    monthlyOtherAid?: number;
+  };
+
   const legacyUnused =
     typeof source.unusedAnnualLeaveDays === "number"
       ? source.unusedAnnualLeaveDays
@@ -104,11 +169,26 @@ function normalizeLegalSettings(raw: unknown): LegalSettings {
         : fallback.unusedAnnualLeaveDays;
 
   return {
-    hireDate: typeof source.hireDate === "string" ? source.hireDate : fallback.hireDate,
-    terminationDate: typeof source.terminationDate === "string" ? source.terminationDate : fallback.terminationDate,
+    hireDate: typeof source.hireDate === "string" ? maskTrDateInput(source.hireDate) : fallback.hireDate,
+    terminationDate:
+      typeof source.terminationDate === "string" ? maskTrDateInput(source.terminationDate) : fallback.terminationDate,
     grossSalary: safePositive(tryParseNumber(String(source.grossSalary ?? fallback.grossSalary))),
+    mealAllowance: safePositive(
+      tryParseNumber(String(source.mealAllowance ?? source.dailyMealAid ?? fallback.mealAllowance))
+    ),
+    transportAllowance: safePositive(
+      tryParseNumber(String(source.transportAllowance ?? source.dailyTransportAid ?? fallback.transportAllowance))
+    ),
+    otherAllowance: safePositive(
+      tryParseNumber(String(source.otherAllowance ?? source.monthlyOtherAid ?? fallback.otherAllowance))
+    ),
     unusedAnnualLeaveDays: safePositive(tryParseNumber(String(legacyUnused))),
-    terminationType: normalizeTerminationType(source.terminationType)
+    stampTaxRate: safePositive(tryParseNumber(String(source.stampTaxRate ?? fallback.stampTaxRate))),
+    severanceCap: safePositive(tryParseNumber(String(source.severanceCap ?? fallback.severanceCap))),
+    terminationType: normalizeTerminationType(source.terminationType),
+    terminationReason: typeof source.terminationReason === "string" ? source.terminationReason : fallback.terminationReason,
+    resignationTemplate: normalizeResignationTemplate(source.resignationTemplate),
+    resignationForm: normalizeResignationForm(source.resignationForm)
   };
 }
 
@@ -116,6 +196,7 @@ function mergeWithDefaults(parsed: Partial<AppData>): AppData {
   const baseSettings = {
     ...DEFAULT_DATA.settings,
     ...(parsed.settings ?? {}),
+    themePreference: normalizeThemePreference(parsed.settings?.themePreference),
     coefficients: {
       ...DEFAULT_DATA.settings.coefficients,
       ...(parsed.settings?.coefficients ?? {})
@@ -212,4 +293,3 @@ export async function loadAppData(userId: string): Promise<AppData> {
 export async function saveAppData(data: AppData, userId: string): Promise<void> {
   await AsyncStorage.setItem(userStorageKey(userId), JSON.stringify(data));
 }
-

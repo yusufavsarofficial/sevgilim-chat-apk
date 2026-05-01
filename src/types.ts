@@ -39,6 +39,8 @@ export type Coefficients = {
   holiday: number;
 };
 
+export type ThemePreference = "SYSTEM" | "LIGHT" | "DARK";
+
 export type PayrollSettings = {
   salaryMode: SalaryMode;
   monthlySalary: number;
@@ -52,6 +54,7 @@ export type PayrollSettings = {
   dailyTransportFee: number;
   salaryPaymentDay: number;
   monthlyTarget: number;
+  themePreference: ThemePreference;
 };
 
 export type CloudConfig = {
@@ -92,12 +95,46 @@ export type TerminationType =
   | "JUST_CAUSE_EMPLOYEE"
   | "MUTUAL_AGREEMENT";
 
+export type ResignationTemplateKey =
+  | "STANDARD"
+  | "NOTICE_WITH"
+  | "NOTICE_WITHOUT"
+  | "RETIREMENT"
+  | "MARRIAGE"
+  | "HEALTH"
+  | "SALARY_UNPAID"
+  | "OVERTIME_UNPAID"
+  | "MOBBING"
+  | "MILITARY"
+  | "PROBATION"
+  | "WORK_CONDITION_CHANGE";
+
+export type ResignationForm = {
+  fullName: string;
+  tcNo: string;
+  companyName: string;
+  department: string;
+  hireDate: string;
+  leaveDate: string;
+  letterDate: string;
+  address: string;
+  explanation: string;
+};
+
 export type LegalSettings = {
   hireDate: string;
   terminationDate: string;
   grossSalary: number;
+  mealAllowance: number;
+  transportAllowance: number;
+  otherAllowance: number;
   unusedAnnualLeaveDays: number;
+  stampTaxRate: number;
+  severanceCap: number;
   terminationType: TerminationType;
+  terminationReason: string;
+  resignationTemplate: ResignationTemplateKey;
+  resignationForm: ResignationForm;
 };
 
 export type AppData = {
@@ -164,10 +201,16 @@ export type MonthGridDay = {
 export type LegalResult = {
   serviceDays: number;
   serviceYears: number;
+  serviceMonths: number;
+  serviceRemainDays: number;
+  serviceText: string;
   annualLeaveEntitled: number;
   annualLeaveRemaining: number;
   annualLeavePay: number;
-  severancePay: number;
+  severanceBase: number;
+  severancePayGross: number;
+  severanceStampTax: number;
+  severancePayNet: number;
   noticeWeeks: number;
   noticePay: number;
   estimatedTotal: number;
@@ -181,4 +224,3 @@ export type AuthUser = {
   role: UserRole;
   createdAt: string;
 };
-
