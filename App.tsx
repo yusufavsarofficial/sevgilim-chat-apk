@@ -366,12 +366,22 @@ export default function App() {
   const effectiveDarkMode = selectedTheme === "DARK" || (selectedTheme === "SYSTEM" && deviceTheme === "dark");
 
   useEffect(() => {
-    const bootstrap = async () => {
-      await ensureDefaultSecurity();
-      const backendOk = await pingBackend();
-      setBackendConnected(backendOk);
+    let mounted = true;
+    const loadGuardTimer = setTimeout(() => {
+      if (mounted) {
+        setLoaded(true);
+      }
+    }, 15000);
 
-      const remoteSession = await remoteMe();
+    const bootstrap = async () => {
+      await ensureDefaultSecurity().catch(() => {});
+
+      const backendOk = await pingBackend().catch(() => false);
+      if (mounted) {
+        setBackendConnected(backendOk);
+      }
+
+      const remoteSession = backendOk ? await remoteMe().catch(() => null) : null;
       if (remoteSession) {
         const localData = await loadAppData(remoteSession.id);
         let mergedData = localData;
@@ -387,6 +397,10 @@ export default function App() {
           // Keep local data when backend sync is unavailable.
         }
 
+        if (!mounted) {
+          return;
+        }
+
         setAuthUser(remoteSession);
         setAuthSource("REMOTE");
         setAppData(mergedData);
@@ -394,13 +408,19 @@ export default function App() {
         return;
       }
 
-      const localSession = await loadLocalSession();
+      const localSession = await loadLocalSession().catch(() => null);
       if (!localSession) {
-        setLoaded(true);
+        if (mounted) {
+          setLoaded(true);
+        }
         return;
       }
 
       const localData = await loadAppData(localSession.id);
+      if (!mounted) {
+        return;
+      }
+
       setAuthUser(localSession);
       setAuthSource("LOCAL");
       setAppData(localData);
@@ -408,8 +428,15 @@ export default function App() {
     };
 
     bootstrap().catch(() => {
-      setLoaded(true);
+      if (mounted) {
+        setLoaded(true);
+      }
     });
+
+    return () => {
+      mounted = false;
+      clearTimeout(loadGuardTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -477,47 +504,6 @@ export default function App() {
   const analytics = useMemo(() => {
     return calculateMonthlyAnalytics(appData.dayRecords, appData.settings, monthKey, appData.holidayDates, summary);
   }, [appData.dayRecords, appData.holidayDates, appData.settings, monthKey, summary]);
-
-  const dailyDetailRows = useMemo(() => {
-    if (!isMonthKey(monthKey)) {
-      return [] as string[];
-    }
-
-    const [yearStr, monthStr] = monthKey.split("-");
-    const daysInMonth = new Date(Number(yearStr), Number(monthStr), 0).getDate();
-    const rows: string[] = [];
-
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const dateKey = `${monthKey}-${`${day}`.padStart(2, "0")}`;
-      const record = appData.dayRecords[dateKey];
-      if (!record || record.status === null) {
-        continue;
-      }
-
-      if (record.status === "WORKED") {
-        const shiftStart = record.work?.start ?? appData.settings.defaultShiftStart;
-        const shiftEnd = record.work?.end ?? appData.settings.defaultShiftEnd;
-        const overtime = round2(record.work?.overtimeHours ?? appData.settings.defaultOvertimeHours);
-        rows.push(
-          `${formatDateKeyTr(dateKey)} - ${dayStatusLabel(record.status)} - ${dayTypeLabel(
-            dayTypeOf(dateKey, appData.holidayDates)
-          )} - ${shiftStart}/${shiftEnd} - ${overtime} saat mesai`
-        );
-        continue;
-      }
-
-      rows.push(`${formatDateKeyTr(dateKey)} - ${dayStatusLabel(record.status)}`);
-    }
-
-    return rows;
-  }, [
-    appData.dayRecords,
-    appData.holidayDates,
-    appData.settings.defaultOvertimeHours,
-    appData.settings.defaultShiftEnd,
-    appData.settings.defaultShiftStart,
-    monthKey
-  ]);
 
   const isMonthClosed = !!appData.closedMonths[monthKey];
 
@@ -1227,22 +1213,6 @@ export default function App() {
     }
   };
 
-  const downloadTimesheetPdf = async () => {
-    const rows = dailyDetailRows
-      .map((row) => `<tr><td style="padding:6px;border:1px solid #d1d5db;">${safeText(row)}</td></tr>`)
-      .join("");
-    const html = [
-      '<html lang="tr"><head><meta charset="utf-8" /></head><body style="font-family:Arial,sans-serif;padding:18px;color:#0f172a;">',
-      "<h1>Puantaj Özeti</h1>",
-      `<p><strong>Ay:</strong> ${safeText(monthLabelTr(monthKey))}</p>`,
-      '<table style="border-collapse:collapse;width:100%;margin-top:12px;">',
-      rows || '<tr><td style="padding:8px;border:1px solid #d1d5db;">Kayıt bulunamadı.</td></tr>',
-      "</table>",
-      "</body></html>"
-    ].join("");
-    await sharePdf(html, "Puantaj PDF İndir");
-  };
-
   const downloadLegalTemplate = async (
     template: "NORMAL" | "HAKLI_FESIH" | "ASKERLIK" | "EVLILIK" | "MOBBING" | "MAAS_ODENMEMESI"
   ) => {
@@ -1297,21 +1267,43 @@ export default function App() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
         >
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <View style={styles.section}>
-              <Text style={styles.brandTitle}>AYFSOFT</Text>
-              <Text style={styles.subtitle}>Puantaj ve Maa? Takip Uygulamas?</Text>
-              <Text style={styles.footerText}>AYFSOFT t?m haklar? sakl?d?r.</Text>
-              <Pressable onPress={() => setLegalModalVisible(true)}>
-                <Text style={styles.linkText}>KVKK, Gizlilik, ?erez, Cihaz Verisi ve Yasal Sorumluluklar</Text>
+          <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.authHeroCard}>
+              <Text style={styles.authBadge}>AYFSOFT</Text>
+              <Text style={styles.authTitle}>Puantaj ve Maaş Takip</Text>
+              <Text style={styles.authSubtitle}>
+                Güvenli giriş yap, vardiyalarını yönet, hesaplamalarını anlık takip et.
+              </Text>
+              <Pressable style={styles.legalChip} onPress={() => setLegalModalVisible(true)}>
+                <Text style={styles.legalChipText}>KVKK, Gizlilik ve Yasal Metinleri Görüntüle</Text>
               </Pressable>
+            </View>
 
-              <View style={styles.tabRow}>
-                <TabButton label="Kullan?c? Giri?i" active={authMode === "USER_LOGIN"} onPress={() => setAuthMode("USER_LOGIN")} />
-                <TabButton label="Kay?t Ol" active={authMode === "USER_REGISTER"} onPress={() => setAuthMode("USER_REGISTER")} />
+            <View style={styles.authFormCard}>
+              <View style={styles.authModeRow}>
+                <Pressable
+                  style={[styles.authModeButton, authMode === "USER_LOGIN" ? styles.authModeButtonActive : null]}
+                  onPress={() => setAuthMode("USER_LOGIN")}
+                >
+                  <Text
+                    style={[styles.authModeButtonText, authMode === "USER_LOGIN" ? styles.authModeButtonTextActive : null]}
+                  >
+                    Kullanıcı Girişi
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.authModeButton, authMode === "USER_REGISTER" ? styles.authModeButtonActive : null]}
+                  onPress={() => setAuthMode("USER_REGISTER")}
+                >
+                  <Text
+                    style={[styles.authModeButtonText, authMode === "USER_REGISTER" ? styles.authModeButtonTextActive : null]}
+                  >
+                    Kayıt Ol
+                  </Text>
+                </Pressable>
               </View>
 
-              <Text style={styles.label}>Kullan?c? ad?</Text>
+              <Text style={styles.label}>Kullanıcı adı</Text>
               <TextInput
                 ref={usernameInputRef}
                 value={authUsername}
@@ -1322,12 +1314,13 @@ export default function App() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={styles.input}
+                placeholder="Örn: yusuf"
                 returnKeyType="next"
                 onSubmitEditing={() => passwordInputRef.current?.focus()}
                 blurOnSubmit={false}
               />
 
-              <Text style={styles.label}>?ifre</Text>
+              <Text style={styles.label}>Şifre</Text>
               <TextInput
                 ref={passwordInputRef}
                 value={authPassword}
@@ -1350,7 +1343,7 @@ export default function App() {
 
               {authMode === "USER_REGISTER" ? (
                 <View style={styles.summaryCard}>
-                  <Text style={styles.label}>Kay?t anahtar?</Text>
+                  <Text style={styles.label}>Kayıt anahtarı</Text>
                   <TextInput
                     ref={inviteKeyInputRef}
                     value={authInviteKey}
@@ -1360,6 +1353,7 @@ export default function App() {
                     }}
                     secureTextEntry
                     style={styles.input}
+                    placeholder="Örn: 2026Avsar"
                     returnKeyType="done"
                     onSubmitEditing={() => void handleRegister()}
                   />
@@ -1368,36 +1362,36 @@ export default function App() {
                   <ConsentCheck
                     checked={consentKvkk}
                     onToggle={() => setConsentKvkk((prev) => !prev)}
-                    text="KVKK Ayd?nlatma Metni'ni okudum ve kabul ediyorum."
+                    text="KVKK Aydınlatma Metni'ni okudum ve kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentAcikRiza}
                     onToggle={() => setConsentAcikRiza((prev) => !prev)}
-                    text="A??k R?za Metni'ni onayl?yorum."
+                    text="Açık Rıza Metni'ni onaylıyorum."
                   />
                   <ConsentCheck
                     checked={consentGizlilik}
                     onToggle={() => setConsentGizlilik((prev) => !prev)}
-                    text="Gizlilik Politikas?'n? okudum ve kabul ediyorum."
+                    text="Gizlilik Politikası'nı okudum ve kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentCerez}
                     onToggle={() => setConsentCerez((prev) => !prev)}
-                    text="?erez Politikas?'n? kabul ediyorum."
+                    text="Çerez Politikası'nı kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentCihazVerisi}
                     onToggle={() => setConsentCihazVerisi((prev) => !prev)}
-                    text="Cihaz Verisi Politikas?'n? kabul ediyorum."
+                    text="Cihaz Verisi Politikası'nı kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentYasalSorumluluk}
                     onToggle={() => setConsentYasalSorumluluk((prev) => !prev)}
-                    text="Yasal Sorumluluk Reddi ve Kullan?m ?artlar?'n? kabul ediyorum."
+                    text="Yasal Sorumluluk Reddi ve Kullanım Şartları'nı kabul ediyorum."
                   />
 
                   <Pressable onPress={() => setLegalModalVisible(true)}>
-                    <Text style={styles.linkText}>Metinleri detayl? incele</Text>
+                    <Text style={styles.linkText}>Metinleri detaylı incele</Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -1405,12 +1399,12 @@ export default function App() {
               {authError ? <Text style={styles.error}>{authError}</Text> : null}
 
               {authMode === "USER_REGISTER" ? (
-                <Pressable style={styles.secondaryButton} onPress={handleRegister} disabled={authBusy}>
-                  <Text style={styles.secondaryButtonText}>{authBusy ? "Kay?t yap?l?yor..." : "Kay?t Ol"}</Text>
+                <Pressable style={styles.primaryButton} onPress={handleRegister} disabled={authBusy}>
+                  <Text style={styles.primaryButtonText}>{authBusy ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Text>
                 </Pressable>
               ) : (
-                <Pressable style={styles.secondaryButton} onPress={handleLogin} disabled={authBusy}>
-                  <Text style={styles.secondaryButtonText}>{authBusy ? "Giri? yap?l?yor..." : "Giri? Yap"}</Text>
+                <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={authBusy}>
+                  <Text style={styles.primaryButtonText}>{authBusy ? "Giriş yapılıyor..." : "Giriş Yap"}</Text>
                 </Pressable>
               )}
             </View>
@@ -1432,7 +1426,7 @@ export default function App() {
                   </View>
                 ))}
                 <Text style={styles.legalWarning}>
-                  Bu uygulamadaki bilgiler bilgilendirme ama?l?d?r. Resm? hukuki dan??manl?k yerine ge?mez.
+                  Bu uygulamadaki bilgiler yalnızca bilgilendirme amaçlıdır. Resmî hukuki danışmanlık yerine geçmez.
                 </Text>
               </ScrollView>
               <Pressable style={styles.secondaryButton} onPress={() => setLegalModalVisible(false)}>
@@ -1450,12 +1444,12 @@ return (
       <ExpoStatusBar style={effectiveDarkMode ? "light" : "dark"} />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Puantaj Maa? Hesap</Text>
-        <Text style={styles.subtitle}>Takvim ?zerinden g?nl?k kay?t ve ayl?k hesaplama</Text>
+        <Text style={styles.title}>Puantaj Maaş Hesap</Text>
+        <Text style={styles.subtitle}>Takvim üzerinden günlük kayıt ve aylık hesaplama</Text>
         <View style={styles.row}>
-          <Text style={styles.helper}>{authUser.role === "ADMIN" ? "Y?netici" : "Kullan?c?"}: {authUser.username}</Text>
+          <Text style={styles.helper}>{authUser.role === "ADMIN" ? "Yönetici" : "Kullanıcı"}: {authUser.username}</Text>
           <Pressable style={styles.deleteButton} onPress={handleLogout}>
-            <Text style={styles.deleteButtonText}>??k??</Text>
+            <Text style={styles.deleteButtonText}>Çıkış</Text>
           </Pressable>
         </View>
         <View style={styles.saveTextSlot}>
@@ -1465,7 +1459,7 @@ return (
 
       <View style={styles.tabRow}>
         <TabButton label="Takvim" active={activeTab === "CALENDAR"} onPress={() => setActiveTab("CALENDAR")} />
-        <TabButton label="?zet" active={activeTab === "SUMMARY"} onPress={() => setActiveTab("SUMMARY")} />
+        <TabButton label="Özet" active={activeTab === "SUMMARY"} onPress={() => setActiveTab("SUMMARY")} />
         <TabButton label="Ayarlar" active={activeTab === "SETTINGS"} onPress={() => setActiveTab("SETTINGS")} />
         <TabButton label="Senkronizasyon" active={activeTab === "SYNC"} onPress={() => setActiveTab("SYNC")} />
         <TabButton label="Hukuk" active={activeTab === "LEGAL"} onPress={() => setActiveTab("LEGAL")} />
@@ -1785,17 +1779,6 @@ return (
               <InfoRow label="İzin oranı" value={`%${analytics.leaveRatePercent}`} />
             </SummaryCard>
 
-            <SummaryCard title="Gün Gün Detay">
-              {dailyDetailRows.length > 0 ? (
-                dailyDetailRows.map((row) => (
-                  <Text key={row} style={styles.detailRowText}>
-                    {row}
-                  </Text>
-                ))
-              ) : (
-                <Text style={styles.helper}>Seçili ay için kayıtlı gün bulunmuyor.</Text>
-              )}
-            </SummaryCard>
           </View>
         ) : null}
 
@@ -2130,7 +2113,7 @@ return (
             ))}
 
             <Text style={styles.legalWarning}>
-              Bu uygulamadaki bilgiler bilgilendirme ama?l?d?r. Resm? hukuki dan??manl?k yerine ge?mez.
+              Bu uygulamadaki bilgiler yalnızca bilgilendirme amaçlıdır. Resmî hukuki danışmanlık yerine geçmez.
             </Text>
 
             <SummaryCard title="?stifa Dilek?esi ?rnekleri">
@@ -2428,6 +2411,100 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 12,
     paddingBottom: 32
+  },
+  authContent: {
+    padding: 14,
+    gap: 12,
+    paddingBottom: 36
+  },
+  authHeroCard: {
+    backgroundColor: "#0f172a",
+    borderRadius: 18,
+    padding: 16,
+    gap: 8
+  },
+  authBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#14b8a6",
+    color: "#0f172a",
+    fontWeight: "800",
+    fontSize: 12
+  },
+  authTitle: {
+    color: "#f8fafc",
+    fontSize: 24,
+    fontWeight: "900"
+  },
+  authSubtitle: {
+    color: "#cbd5e1",
+    fontSize: 13,
+    lineHeight: 20
+  },
+  legalChip: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#111827"
+  },
+  legalChipText: {
+    color: "#a5f3fc",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  authFormCard: {
+    width: "100%",
+    maxWidth: 1100,
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#d9e2ec",
+    padding: 12,
+    gap: 10
+  },
+  authModeRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  authModeButton: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#f8fafc"
+  },
+  authModeButtonActive: {
+    backgroundColor: "#0f766e",
+    borderColor: "#0f766e"
+  },
+  authModeButtonText: {
+    color: "#334155",
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  authModeButtonTextActive: {
+    color: "#ffffff"
+  },
+  primaryButton: {
+    backgroundColor: "#0f766e",
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 14
   },
   section: {
     width: "100%",

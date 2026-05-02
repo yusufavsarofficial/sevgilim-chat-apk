@@ -575,9 +575,9 @@ export function calculateMonthlySummary(
   const salaryConfigured = monthlySalary > 0 && monthlyBaseHours > 0;
   const hourlyRate = salaryConfigured ? monthlySalary / monthlyBaseHours : 0;
   const dailySalary = salaryConfigured ? monthlySalary / 30 : 0;
-
-  const reportDeduction = salaryConfigured ? reportDays * dailySalary : 0;
-  const baseSalary = salaryConfigured ? Math.max(0, monthlySalary - reportDeduction) : 0;
+  const payableWorkedDays = Math.min(30, workedDays);
+  const baseSalary = salaryConfigured ? payableWorkedDays * dailySalary : 0;
+  const reportDeduction = salaryConfigured ? Math.max(0, monthlySalary - baseSalary) : 0;
   const overtimePay = salaryConfigured
     ? overtimeHours * hourlyRate * safePositive(settings.coefficients.overtime)
     : 0;

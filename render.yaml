@@ -18,11 +18,11 @@ services:
       - key: REFRESH_TOKEN_EXPIRES_IN
         value: 30d
       - key: ADMIN_USERNAME
-        sync: false
+        value: Yusuf
       - key: ADMIN_PASSWORD_HASH
-        sync: false
+        value: c3451b6107562d64e47292af94e8dd0ee16f8dc425b1c49d51196631e2292551
       - key: REGISTER_INVITE_KEY_HASH
-        sync: false
+        value: 0ac5c8a0408bb091b81da0f486a2a70b45b6bbe5924bd5f62facbac802503039
       - key: PORT
         value: 3000
       - key: CORS_ORIGIN

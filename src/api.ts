@@ -5,6 +5,8 @@ import { ConsentBundle } from "./auth";
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://sevgilim-chat.onrender.com").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "@puantaj-maas-apk:remote:access";
 const REFRESH_TOKEN_KEY = "@puantaj-maas-apk:remote:refresh";
+const DEFAULT_TIMEOUT_MS = 12000;
+const HEALTH_TIMEOUT_MS = 7000;
 
 const GENERIC_ERROR = "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
 
@@ -53,6 +55,29 @@ type AdminUserDetail = {
 };
 
 let inMemoryTokens: TokenState | null = null;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("İstek zaman aşımına uğradı.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function toAuthUser(user: RemoteUser): AuthUser {
   return {
@@ -125,7 +150,7 @@ async function refreshAccessToken(): Promise<string | null> {
     return null;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/refresh`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -168,7 +193,7 @@ async function authorizedFetch(path: string, init: RequestInit = {}, retried = f
     Authorization: `Bearer ${tokens.accessToken}`
   };
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     ...init,
     headers
   });
@@ -185,7 +210,11 @@ async function authorizedFetch(path: string, init: RequestInit = {}, retried = f
 
 export async function pingBackend(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/health`, { method: "GET" });
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/health`,
+      { method: "GET" },
+      HEALTH_TIMEOUT_MS
+    );
     return response.ok;
   } catch {
     return false;
@@ -202,7 +231,7 @@ export async function remoteRegister(input: {
   inviteKey: string;
   consents: ConsentBundle;
 }): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/register`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -225,7 +254,7 @@ export async function remoteRegister(input: {
 }
 
 export async function remoteLogin(username: string, password: string): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
