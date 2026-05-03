@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.yusuf.puantajmaashesap",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"

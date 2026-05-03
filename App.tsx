@@ -1,4 +1,4 @@
-﻿import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as FileSystem from "expo-file-system/legacy";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Print from "expo-print";
@@ -118,125 +118,125 @@ type NumericSettingKey =
   | "salaryPaymentDay"
   | "monthlyTarget";
 
-const WEEK_LABELS = ["Pzt", "Sal", "Ã‡ar", "Per", "Cum", "Cmt", "Paz"];
+const WEEK_LABELS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const TERMINATION_TYPE_OPTIONS: Array<{ value: TerminationType; label: string }> = [
-  { value: "EMPLOYER_TERMINATION", label: "Ä°ÅŸveren feshi" },
-  { value: "EMPLOYEE_RESIGNATION", label: "Ä°stifa" },
-  { value: "JUST_CAUSE_EMPLOYEE", label: "Ä°ÅŸÃ§i haklÄ± fesih" },
-  { value: "MUTUAL_AGREEMENT", label: "KarÅŸÄ±lÄ±klÄ± anlaÅŸma (ikale)" }
+  { value: "EMPLOYER_TERMINATION", label: "İşveren feshi" },
+  { value: "EMPLOYEE_RESIGNATION", label: "İstifa" },
+  { value: "JUST_CAUSE_EMPLOYEE", label: "İşçi haklı fesih" },
+  { value: "MUTUAL_AGREEMENT", label: "Karşılıklı anlaşma (ikale)" }
 ];
 
-const GENEL_HATA = "Ä°ÅŸlem gerÃ§ekleÅŸtirilemedi, lÃ¼tfen tekrar deneyin.";
-const MARKA_METNI = "AYFSOFT PTE & YUSUF AVÅAR TÃ¼m HaklarÄ± SaklÄ±dÄ±r";
+const GENEL_HATA = "İşlem gerçekleştirilemedi, lütfen tekrar deneyin.";
+const MARKA_METNI = "AYFSOFT PTE & YUSUF AVŞAR Tüm Hakları Saklıdır";
 const HUKUK_UYARI_METNI =
-  "Bu uygulamadaki bilgiler ve hesaplamalar bilgilendirme amaÃ§lÄ±dÄ±r. ResmÃ® hukuki danÄ±ÅŸmanlÄ±k yerine geÃ§mez. Nihai iÅŸlem Ã¶ncesinde yetkili kurum veya hukuk uzmanÄ±ndan destek alÄ±nmalÄ±dÄ±r.";
+  "Bu uygulamadaki bilgiler ve hesaplamalar bilgilendirme amaçlıdır. Resmî hukuki danışmanlık yerine geçmez. Nihai işlem öncesinde yetkili kurum veya hukuk uzmanından destek alınmalıdır.";
 const MEAL_TRANSPORT_METHOD_OPTIONS: Array<{ value: "WORKED_ONLY" | "WORKED_AND_ANNUAL" | "PAYABLE_ALL"; label: string }> = [
-  { value: "WORKED_ONLY", label: "Sadece fiili Ã§alÄ±ÅŸÄ±lan gÃ¼nler" },
-  { value: "WORKED_AND_ANNUAL", label: "Ã‡alÄ±ÅŸÄ±lan + yÄ±llÄ±k izin" },
-  { value: "PAYABLE_ALL", label: "TÃ¼m Ã¶denebilir gÃ¼nler" }
+  { value: "WORKED_ONLY", label: "Sadece fiili çalışılan günler" },
+  { value: "WORKED_AND_ANNUAL", label: "Çalışılan + yıllık izin" },
+  { value: "PAYABLE_ALL", label: "Tüm ödenebilir günler" }
 ];
 const LETTER_TEMPLATE_OPTIONS: Array<{ value: ResignationTemplateKey; label: string }> = [
-  { value: "STANDARD", label: "1. Standart istifa dilekÃ§esi" },
-  { value: "NOTICE_WITH", label: "2. Ä°hbar sÃ¼reli istifa dilekÃ§esi" },
-  { value: "NOTICE_WITHOUT", label: "3. Ä°hbar sÃ¼resiz istifa dilekÃ§esi" },
-  { value: "PROBATION", label: "4. Deneme sÃ¼resinde istifa dilekÃ§esi" },
-  { value: "RETIREMENT", label: "5. Emeklilik nedeniyle ayrÄ±lÄ±ÅŸ dilekÃ§esi" },
-  { value: "MILITARY", label: "6. Askerlik nedeniyle ayrÄ±lÄ±ÅŸ dilekÃ§esi" },
-  { value: "MARRIAGE", label: "7. Evlilik nedeniyle ayrÄ±lÄ±ÅŸ dilekÃ§esi" },
-  { value: "HEALTH", label: "8. SaÄŸlÄ±k nedeniyle haklÄ± fesih dilekÃ§esi" },
-  { value: "SALARY_UNPAID", label: "9. MaaÅŸ Ã¶denmemesi nedeniyle haklÄ± fesih dilekÃ§esi" },
-  { value: "OVERTIME_UNPAID", label: "10. Fazla mesai Ã¶denmemesi nedeniyle haklÄ± fesih dilekÃ§esi" },
-  { value: "MOBBING", label: "11. Mobbing nedeniyle haklÄ± fesih dilekÃ§esi" },
-  { value: "WORK_CONDITION_CHANGE", label: "12. Ä°ÅŸ ÅŸartlarÄ±nÄ±n esaslÄ± deÄŸiÅŸmesi nedeniyle fesih dilekÃ§esi" },
-  { value: "OHS_VIOLATION", label: "13. Ä°SG ihlali nedeniyle haklÄ± fesih dilekÃ§esi" },
-  { value: "SGK_PREMIUM_MISSING", label: "14. SGK primi eksik yatÄ±rÄ±lmasÄ± nedeniyle haklÄ± fesih dilekÃ§esi" },
-  { value: "ANNUAL_LEAVE_DENIED", label: "15. YÄ±llÄ±k izin kullandÄ±rÄ±lmamasÄ± nedeniyle baÅŸvuru/fesih dilekÃ§esi" }
+  { value: "STANDARD", label: "1. Standart istifa dilekçesi" },
+  { value: "NOTICE_WITH", label: "2. İhbar süreli istifa dilekçesi" },
+  { value: "NOTICE_WITHOUT", label: "3. İhbar süresiz istifa dilekçesi" },
+  { value: "PROBATION", label: "4. Deneme süresinde istifa dilekçesi" },
+  { value: "RETIREMENT", label: "5. Emeklilik nedeniyle ayrılış dilekçesi" },
+  { value: "MILITARY", label: "6. Askerlik nedeniyle ayrılış dilekçesi" },
+  { value: "MARRIAGE", label: "7. Evlilik nedeniyle ayrılış dilekçesi" },
+  { value: "HEALTH", label: "8. Sağlık nedeniyle haklı fesih dilekçesi" },
+  { value: "SALARY_UNPAID", label: "9. Maaş ödenmemesi nedeniyle haklı fesih dilekçesi" },
+  { value: "OVERTIME_UNPAID", label: "10. Fazla mesai ödenmemesi nedeniyle haklı fesih dilekçesi" },
+  { value: "MOBBING", label: "11. Mobbing nedeniyle haklı fesih dilekçesi" },
+  { value: "WORK_CONDITION_CHANGE", label: "12. İş şartlarının esaslı değişmesi nedeniyle fesih dilekçesi" },
+  { value: "OHS_VIOLATION", label: "13. İSG ihlali nedeniyle haklı fesih dilekçesi" },
+  { value: "SGK_PREMIUM_MISSING", label: "14. SGK primi eksik yatırılması nedeniyle haklı fesih dilekçesi" },
+  { value: "ANNUAL_LEAVE_DENIED", label: "15. Yıllık izin kullandırılmaması nedeniyle başvuru/fesih dilekçesi" }
 ];
 
 const LEGAL_SECTIONS: Array<{ id: string; title: string; content: string }> = [
   {
     id: "kvkk",
-    title: "KVKK AydÄ±nlatma Metni",
+    title: "KVKK Aydınlatma Metni",
     content:
-      "AYFSOFT, puantaj ve maaÅŸ hesaplama hizmetini sunarken kimlik bilgileri, Ã§alÄ±ÅŸma kayÄ±tlarÄ±, izin/mesai verileri ve oturum gÃ¼venliÄŸi kayÄ±tlarÄ±nÄ± veri minimizasyonu ilkesiyle iÅŸler. Ä°ÅŸleme amacÄ±; hizmetin sunulmasÄ±, mevzuat yÃ¼kÃ¼mlÃ¼lÃ¼klerinin yerine getirilmesi, bilgi gÃ¼venliÄŸinin saÄŸlanmasÄ± ve kullanÄ±cÄ± taleplerinin yÃ¶netimidir. Veriler yalnÄ±zca yetkili kiÅŸilerce eriÅŸilebilir ÅŸekilde saklanÄ±r; saklama sÃ¼resi dolan veya iÅŸleme amacÄ± ortadan kalkan veriler silinir, yok edilir veya anonim hale getirilir. KullanÄ±cÄ±, KVKK 11. madde kapsamÄ±ndaki tÃ¼m haklarÄ±nÄ± kullanabilir."
+      "AYFSOFT, puantaj ve maaş hesaplama hizmetini sunarken kimlik bilgileri, çalışma kayıtları, izin/mesai verileri ve oturum güvenliği kayıtlarını veri minimizasyonu ilkesiyle işler. İşleme amacı; hizmetin sunulması, mevzuat yükümlülüklerinin yerine getirilmesi, bilgi güvenliğinin sağlanması ve kullanıcı taleplerinin yönetimidir. Veriler yalnızca yetkili kişilerce erişilebilir şekilde saklanır; saklama süresi dolan veya işleme amacı ortadan kalkan veriler silinir, yok edilir veya anonim hale getirilir. Kullanıcı, KVKK 11. madde kapsamındaki tüm haklarını kullanabilir."
   },
   {
     id: "acik-riza",
-    title: "AÃ§Ä±k RÄ±za Metni",
+    title: "Açık Rıza Metni",
     content:
-      "KullanÄ±cÄ±; uygulamada yer alan kiÅŸisel veri iÅŸleme sÃ¼reÃ§leri, cihaz verisi kullanÄ±mÄ±, gÃ¼venlik kayÄ±tlarÄ± ve hukuki bilgilendirme metinleri hakkÄ±nda aydÄ±nlatÄ±ldÄ±ÄŸÄ±nÄ± kabul eder. AÃ§Ä±k rÄ±za, Ã¶zgÃ¼r iradeyle ve bilgilendirmeye dayalÄ± olarak verilir; kullanÄ±cÄ± dilediÄŸi zaman ilgili baÅŸvuru kanallarÄ± Ã¼zerinden rÄ±zasÄ±nÄ± geri Ã§ekebilir. RÄ±zanÄ±n geri Ã§ekilmesi, geri Ã§ekme tarihine kadar yapÄ±lan iÅŸlemleri hukuka aykÄ±rÄ± hale getirmez."
+      "Kullanıcı; uygulamada yer alan kişisel veri işleme süreçleri, cihaz verisi kullanımı, güvenlik kayıtları ve hukuki bilgilendirme metinleri hakkında aydınlatıldığını kabul eder. Açık rıza, özgür iradeyle ve bilgilendirmeye dayalı olarak verilir; kullanıcı dilediği zaman ilgili başvuru kanalları üzerinden rızasını geri çekebilir. Rızanın geri çekilmesi, geri çekme tarihine kadar yapılan işlemleri hukuka aykırı hale getirmez."
   },
   {
     id: "gizlilik",
-    title: "Gizlilik PolitikasÄ±",
+    title: "Gizlilik Politikası",
     content:
-      "Uygulama verileri yetkisiz eriÅŸim, ifÅŸa, deÄŸiÅŸtirme ve kayba karÅŸÄ± teknik ve idari tedbirlerle korunur. Kimlik doÄŸrulama, oturum yÃ¶netimi, oran sÄ±nÄ±rlama, eriÅŸim denetimi ve kayÄ±t mekanizmalarÄ± gÃ¼venlik Ã§erÃ§evesinin parÃ§asÄ±dÄ±r. KullanÄ±cÄ± verileri ticari amaÃ§la Ã¼Ã§Ã¼ncÃ¼ taraflara satÄ±lmaz. Yasal zorunluluk veya resmi merci talebi dÄ±ÅŸÄ±nda paylaÅŸÄ±m yapÄ±lmaz."
+      "Uygulama verileri yetkisiz erişim, ifşa, değiştirme ve kayba karşı teknik ve idari tedbirlerle korunur. Kimlik doğrulama, oturum yönetimi, oran sınırlama, erişim denetimi ve kayıt mekanizmaları güvenlik çerçevesinin parçasıdır. Kullanıcı verileri ticari amaçla üçüncü taraflara satılmaz. Yasal zorunluluk veya resmi merci talebi dışında paylaşım yapılmaz."
   },
   {
     id: "cerez",
-    title: "Ã‡erez PolitikasÄ±",
+    title: "Çerez Politikası",
     content:
-      "Uygulama, oturum sÃ¼rekliliÄŸi ve gÃ¼venlik iÃ§in teknik Ã§erez benzeri iÅŸaretleyiciler kullanabilir. Bu bileÅŸenler reklam amaÃ§lÄ± deÄŸil, yalnÄ±zca hizmetin gÃ¼venli Ã§alÄ±ÅŸmasÄ± ve kullanÄ±cÄ± deneyiminin sÃ¼rdÃ¼rÃ¼lebilmesi iÃ§in kullanÄ±lÄ±r. Zorunlu olmayan kullanÄ±m senaryolarÄ± devreye alÄ±nÄ±rsa kullanÄ±cÄ± ayrÄ±ca bilgilendirilir."
+      "Uygulama, oturum sürekliliği ve güvenlik için teknik çerez benzeri işaretleyiciler kullanabilir. Bu bileşenler reklam amaçlı değil, yalnızca hizmetin güvenli çalışması ve kullanıcı deneyiminin sürdürülebilmesi için kullanılır. Zorunlu olmayan kullanım senaryoları devreye alınırsa kullanıcı ayrıca bilgilendirilir."
   },
   {
     id: "cihaz",
-    title: "Cihaz Verisi PolitikasÄ±",
+    title: "Cihaz Verisi Politikası",
     content:
-      "Cihaz modeli, iÅŸletim sistemi sÃ¼rÃ¼mÃ¼, uygulama sÃ¼rÃ¼mÃ¼ ve gÃ¼venlik sinyalleri (Ã¶r. emÃ¼latÃ¶r/gerÃ§ek cihaz bilgisi) yalnÄ±zca gÃ¼venlik, hata teÅŸhisi ve hizmet kalitesi amaÃ§larÄ±yla iÅŸlenir. Bu veriler, kullanÄ±cÄ±yÄ± teknik risklerden korumak ve hizmet sÃ¼rekliliÄŸini saÄŸlamak iÃ§in kullanÄ±lÄ±r."
+      "Cihaz modeli, işletim sistemi sürümü, uygulama sürümü ve güvenlik sinyalleri (ör. emülatör/gerçek cihaz bilgisi) yalnızca güvenlik, hata teşhisi ve hizmet kalitesi amaçlarıyla işlenir. Bu veriler, kullanıcıyı teknik risklerden korumak ve hizmet sürekliliğini sağlamak için kullanılır."
   },
   {
     id: "kullanim-sartlari",
-    title: "KullanÄ±m ÅartlarÄ±",
+    title: "Kullanım Şartları",
     content:
-      "Uygulama Ã§Ä±ktÄ±larÄ± bilgilendirme ve takip amaÃ§lÄ±dÄ±r. ResmÃ® bordro, iÅŸ sÃ¶zleÅŸmesi, ÅŸirket iÃ§i kayÄ±tlar ve ilgili mevzuat Ã¶nceliklidir. KullanÄ±cÄ±, girdiÄŸi bilgilerin doÄŸruluÄŸundan sorumludur. Uygulama verilerinin eksik veya hatalÄ± girilmesi halinde oluÅŸabilecek sonuÃ§lardan kullanÄ±cÄ± sorumludur."
+      "Uygulama çıktıları bilgilendirme ve takip amaçlıdır. Resmî bordro, iş sözleşmesi, şirket içi kayıtlar ve ilgili mevzuat önceliklidir. Kullanıcı, girdiği bilgilerin doğruluğundan sorumludur. Uygulama verilerinin eksik veya hatalı girilmesi halinde oluşabilecek sonuçlardan kullanıcı sorumludur."
   },
   {
     id: "yasal-sorumluluk",
     title: "Yasal Sorumluluk Reddi",
     content:
-      "Uygulamadaki hesaplamalar genel formÃ¼ller Ã¼zerinden yapÄ±lÄ±r ve her iÅŸyeri sÃ¶zleÅŸme ÅŸartÄ± iÃ§in bire bir sonuÃ§ garantisi vermez. Ä°ÅŸ hukuku uyuÅŸmazlÄ±klarÄ±nda avukat, mali mÃ¼ÅŸavir veya yetkili kurum gÃ¶rÃ¼ÅŸÃ¼ esas alÄ±nmalÄ±dÄ±r. Uygulama hiÃ§bir durumda resmÃ® hukuki mÃ¼talaa yerine geÃ§mez."
+      "Uygulamadaki hesaplamalar genel formüller üzerinden yapılır ve her işyeri sözleşme şartı için bire bir sonuç garantisi vermez. İş hukuku uyuşmazlıklarında avukat, mali müşavir veya yetkili kurum görüşü esas alınmalıdır. Uygulama hiçbir durumda resmî hukuki mütalaa yerine geçmez."
   },
   {
     id: "veri-saklama",
     title: "Veri Saklama",
     content:
-      "KiÅŸisel veriler iÅŸleme amacÄ± ve yasal saklama sÃ¼releri boyunca tutulur. SÃ¼re sonunda veriler gÃ¼venli ÅŸekilde imha edilir veya anonim hale getirilir. Yedekleme, bÃ¼tÃ¼nlÃ¼k kontrolÃ¼ ve eriÅŸim kayÄ±tlarÄ± dÃ¼zenli gÃ¼venlik kontrolleriyle yÃ¶netilir."
+      "Kişisel veriler işleme amacı ve yasal saklama süreleri boyunca tutulur. Süre sonunda veriler güvenli şekilde imha edilir veya anonim hale getirilir. Yedekleme, bütünlük kontrolü ve erişim kayıtları düzenli güvenlik kontrolleriyle yönetilir."
   },
   {
     id: "veri-silme",
     title: "Veri Silme",
     content:
-      "KullanÄ±cÄ±, hesabÄ± veya verileri iÃ§in silme talebi iletebilir. Talep mevzuata uygun olarak deÄŸerlendirilir; saklama zorunluluÄŸu bulunmayan veriler silinir. Silme iÅŸlemi tamamlandÄ±ÄŸÄ±nda kullanÄ±cÄ±ya bilgilendirme yapÄ±lÄ±r."
+      "Kullanıcı, hesabı veya verileri için silme talebi iletebilir. Talep mevzuata uygun olarak değerlendirilir; saklama zorunluluğu bulunmayan veriler silinir. Silme işlemi tamamlandığında kullanıcıya bilgilendirme yapılır."
   },
   {
     id: "kullanici-haklari",
-    title: "KullanÄ±cÄ± HaklarÄ±",
+    title: "Kullanıcı Hakları",
     content:
-      "KullanÄ±cÄ±; veriye eriÅŸim, dÃ¼zeltme, silme, iÅŸleme kÄ±sÄ±tlama, itiraz, taÅŸÄ±nabilirlik ve bilgi talebi haklarÄ±nÄ± kullanabilir. BaÅŸvurular kimlik doÄŸrulamasÄ± sonrasÄ± makul sÃ¼rede cevaplanÄ±r. UyuÅŸmazlÄ±k halinde ilgili denetim kurumlarÄ±na baÅŸvuru hakkÄ± saklÄ±dÄ±r."
+      "Kullanıcı; veriye erişim, düzeltme, silme, işleme kısıtlama, itiraz, taşınabilirlik ve bilgi talebi haklarını kullanabilir. Başvurular kimlik doğrulaması sonrası makul sürede cevaplanır. Uyuşmazlık halinde ilgili denetim kurumlarına başvuru hakkı saklıdır."
   },
   {
     id: "is-hukuku",
-    title: "Ä°ÅŸ Hukuku Bilgilendirmesi",
+    title: "İş Hukuku Bilgilendirmesi",
     content:
-      "Puantaj, fazla mesai, hafta tatili ve UBGT deÄŸerlendirmesi yapÄ±lÄ±rken iÅŸ sÃ¶zleÅŸmesi, toplu iÅŸ sÃ¶zleÅŸmesi, ÅŸirket iÃ§ dÃ¼zenlemeleri ve gÃ¼ncel mevzuat birlikte yorumlanmalÄ±dÄ±r. Bu uygulama yalnÄ±zca bilgilendirme amacÄ±yla hesap Ã¼retir; resmÃ® bordro, iÅŸveren kayÄ±tlarÄ± ve yetkili kurum kararlarÄ± esastÄ±r."
+      "Puantaj, fazla mesai, hafta tatili ve UBGT değerlendirmesi yapılırken iş sözleşmesi, toplu iş sözleşmesi, şirket iç düzenlemeleri ve güncel mevzuat birlikte yorumlanmalıdır. Bu uygulama yalnızca bilgilendirme amacıyla hesap üretir; resmî bordro, işveren kayıtları ve yetkili kurum kararları esastır."
   },
   {
     id: "kidem",
-    title: "KÄ±dem TazminatÄ± Bilgilendirmesi",
+    title: "Kıdem Tazminatı Bilgilendirmesi",
     content:
-      "KÄ±dem tazminatÄ± deÄŸerlendirmesi 1475 sayÄ±lÄ± Kanun m.14 esas alÄ±narak hizmet sÃ¼resi, brÃ¼t Ã¼cret, dÃ¼zenli yan haklar ve gÃ¼ncel kÄ±dem tavanÄ± dikkate alÄ±narak yapÄ±lÄ±r. Hesaplama sonucu tahmin niteliÄŸindedir; nihai Ã¶deme iÅŸveren bordrosu, SGK kayÄ±tlarÄ± ve hukuki inceleme ile kesinleÅŸir."
+      "Kıdem tazminatı değerlendirmesi 1475 sayılı Kanun m.14 esas alınarak hizmet süresi, brüt ücret, düzenli yan haklar ve güncel kıdem tavanı dikkate alınarak yapılır. Hesaplama sonucu tahmin niteliğindedir; nihai ödeme işveren bordrosu, SGK kayıtları ve hukuki inceleme ile kesinleşir."
   },
   {
     id: "ihbar",
-    title: "Ä°hbar TazminatÄ± Bilgilendirmesi",
+    title: "İhbar Tazminatı Bilgilendirmesi",
     content:
-      "Ä°hbar sÃ¼releri 4857 sayÄ±lÄ± Ä°ÅŸ Kanunu m.17 kapsamÄ±nda hesaplanÄ±r: 6 aydan az 2 hafta (14 gÃ¼n), 6 ay-1.5 yÄ±l 4 hafta (28 gÃ¼n), 1.5 yÄ±l-3 yÄ±l 6 hafta (42 gÃ¼n), 3 yÄ±ldan fazla 8 hafta (56 gÃ¼n). Uygulama bu sÃ¼reler Ã¼zerinden tahmini ihbar bedeli Ã¼retir."
+      "İhbar süreleri 4857 sayılı İş Kanunu m.17 kapsamında hesaplanır: 6 aydan az 2 hafta (14 gün), 6 ay-1.5 yıl 4 hafta (28 gün), 1.5 yıl-3 yıl 6 hafta (42 gün), 3 yıldan fazla 8 hafta (56 gün). Uygulama bu süreler üzerinden tahmini ihbar bedeli üretir."
   },
   {
     id: "istifa",
-    title: "Ä°stifa SÃ¼reÃ§leri",
+    title: "İstifa Süreçleri",
     content:
-      "Ä°stifa sÃ¼recinde tarih, gerekÃ§e ve teslim biÃ§imi Ã¶nemlidir. HaklÄ± fesih, askerlik, evlilik, mobbing veya Ã¼cretin Ã¶denmemesi gibi nedenlerde mevzuata uygun belge ve bildirim dÃ¼zeni izlenmelidir. Uygulama, dilekÃ§e taslaklarÄ± sunar; nihai metin somut olaya gÃ¶re uzman desteÄŸiyle kontrol edilmelidir."
+      "İstifa sürecinde tarih, gerekçe ve teslim biçimi önemlidir. Haklı fesih, askerlik, evlilik, mobbing veya ücretin ödenmemesi gibi nedenlerde mevzuata uygun belge ve bildirim düzeni izlenmelidir. Uygulama, dilekçe taslakları sunar; nihai metin somut olaya göre uzman desteğiyle kontrol edilmelidir."
   }
 ];
 
@@ -467,7 +467,7 @@ function AppContent() {
   const [adminNoteInput, setAdminNoteInput] = useState("");
   const [adminIpBans, setAdminIpBans] = useState<AdminPanelIpBan[]>([]);
   const [adminIpInput, setAdminIpInput] = useState("");
-  const [adminIpReason, setAdminIpReason] = useState("GÃ¼venlik ihlali");
+  const [adminIpReason, setAdminIpReason] = useState("Güvenlik ihlali");
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminError, setAdminError] = useState("");
 
@@ -661,9 +661,9 @@ function AppContent() {
   }, []);
   const legalDateFormatWarning =
     appData.legal.hireDate && !isTrDate(appData.legal.hireDate)
-      ? "Ä°ÅŸe giriÅŸ tarihi 01.01.2025 formatÄ±nda olmalÄ±dÄ±r."
+      ? "İşe giriş tarihi 01.01.2025 formatında olmalıdır."
       : appData.legal.terminationDate && !isTrDate(appData.legal.terminationDate)
-        ? "Ä°ÅŸten Ã§Ä±kÄ±ÅŸ tarihi 01.01.2026 formatÄ±nda olmalÄ±dÄ±r."
+        ? "İşten çıkış tarihi 01.01.2026 formatında olmalıdır."
         : "";
   const generatedDraft = buildResignationDraft({
     template: selectedLetterTemplate,
@@ -727,11 +727,11 @@ function AppContent() {
 
   const saveMonthPayment = () => {
     if (!isMonthKey(monthKey)) {
-      Alert.alert("Ay formatÄ± hatalÄ±", "Ay bilgisi YYYY-MM olmalÄ±.");
+      Alert.alert("Ay formatı hatalı", "Ay bilgisi YYYY-MM olmalı.");
       return;
     }
     if (isMonthClosed) {
-      Alert.alert("Ay kapalÄ±", "Bu ay kapalÄ± olduÄŸu iÃ§in Ã¶deme deÄŸiÅŸtirilemez.");
+      Alert.alert("Ay kapalı", "Bu ay kapalı olduğu için ödeme değiştirilemez.");
       return;
     }
 
@@ -758,7 +758,7 @@ function AppContent() {
       return;
     }
     if (isMonthClosed) {
-      Alert.alert("Ay kapalÄ±", "Bu ay kapalÄ± olduÄŸu iÃ§in deÄŸiÅŸiklik yapÄ±lamaz.");
+      Alert.alert("Ay kapalı", "Bu ay kapalı olduğu için değişiklik yapılamaz.");
       return;
     }
 
@@ -803,7 +803,7 @@ function AppContent() {
       return;
     }
     if (!/^\d{1,2}:\d{2}$/.test(dayEditStart) || !/^\d{1,2}:\d{2}$/.test(dayEditEnd)) {
-      Alert.alert("Saat hatalÄ±", "BaÅŸlangÄ±Ã§ ve bitiÅŸ 20:00 formatÄ±nda olmalÄ±.");
+      Alert.alert("Saat hatalı", "Başlangıç ve bitiş 20:00 formatında olmalı.");
       return;
     }
     const totalHours = safePositive(tryParseNumber(dayEditTotalHours));
@@ -837,15 +837,15 @@ function AppContent() {
 
   const applyBulkDayStatus = (status: DayStatus | null) => {
     if (bulkRangeDateKeys.length === 0) {
-      Alert.alert("Toplu iÅŸlem", "Ã–nce takvimden bir aralÄ±k seÃ§in.");
+      Alert.alert("Toplu işlem", "Önce takvimden bir aralık seçin.");
       return;
     }
     const nextStatusText = dayStatusLabel(status);
     Alert.alert(
-      "Toplu iÅŸlem onayÄ±",
-      `${bulkRangeDateKeys.length} gÃ¼ne '${nextStatusText}' durumu uygulanacak. Devam edilsin mi?`,
+      "Toplu işlem onayı",
+      `${bulkRangeDateKeys.length} güne '${nextStatusText}' durumu uygulanacak. Devam edilsin mi?`,
       [
-        { text: "VazgeÃ§", style: "cancel" },
+        { text: "Vazgeç", style: "cancel" },
         {
           text: "Uygula",
           onPress: () => applyDayStatusToDates(bulkRangeDateKeys, status)
@@ -877,7 +877,7 @@ function AppContent() {
   const addHolidayDate = () => {
     const dateKey = holidayInput.trim();
     if (!isIsoDate(dateKey)) {
-      Alert.alert("Tarih hatalÄ±", "Tarih YYYY-MM-DD formatÄ±nda olmalÄ±dÄ±r.");
+      Alert.alert("Tarih hatalı", "Tarih YYYY-MM-DD formatında olmalıdır.");
       return;
     }
 
@@ -1004,7 +1004,7 @@ function AppContent() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Ä°zin gerekli", "Galeriden profil fotoÄŸrafÄ± seÃ§mek iÃ§in fotoÄŸraf izni vermelisiniz.");
+        Alert.alert("İzin gerekli", "Galeriden profil fotoğrafı seçmek için fotoğraf izni vermelisiniz.");
         return;
       }
 
@@ -1029,23 +1029,23 @@ function AppContent() {
       }
       setProfileField("avatarUrl", targetUri);
     } catch {
-      Alert.alert("FotoÄŸraf", "FotoÄŸraf seÃ§ilemedi. LÃ¼tfen tekrar deneyin.");
+      Alert.alert("Fotoğraf", "Fotoğraf seçilemedi. Lütfen tekrar deneyin.");
     }
   };
 
   const closeMonth = () => {
     if (!isMonthKey(monthKey)) {
-      Alert.alert("Ay formatÄ± hatalÄ±", "Ay bilgisi YYYY-MM olmalÄ±.");
+      Alert.alert("Ay formatı hatalı", "Ay bilgisi YYYY-MM olmalı.");
       return;
     }
 
     Alert.alert(
-      "Ay kapatma onayÄ±",
-      "Bu ay kapatÄ±lacak, kayÄ±tlar deÄŸiÅŸtirilemeyecek. Emin misin?",
+      "Ay kapatma onayı",
+      "Bu ay kapatılacak, kayıtlar değiştirilemeyecek. Emin misin?",
       [
-        { text: "VazgeÃ§", style: "cancel" },
+        { text: "Vazgeç", style: "cancel" },
         {
-          text: "AyÄ± Kapat",
+          text: "Ayı Kapat",
           style: "destructive",
           onPress: () => {
             setAppData((prev) => ({
@@ -1073,10 +1073,10 @@ function AppContent() {
   };
 
   const resetSystem = () => {
-    Alert.alert("TÃ¼m sistemi sÄ±fÄ±rla", "TÃ¼m kayÄ±tlar silinecek. Devam edilsin mi?", [
-      { text: "VazgeÃ§", style: "cancel" },
+    Alert.alert("Tüm sistemi sıfırla", "Tüm kayıtlar silinecek. Devam edilsin mi?", [
+      { text: "Vazgeç", style: "cancel" },
       {
-        text: "SÄ±fÄ±rla",
+        text: "Sıfırla",
         style: "destructive",
         onPress: () => {
           setAppData(DEFAULT_DATA);
@@ -1089,10 +1089,10 @@ function AppContent() {
   };
 
   const resetEverything = () => {
-    Alert.alert("Yerel verileri sÄ±fÄ±rla", "Bu cihazdaki kayÄ±tlar temizlenecek. Devam edilsin mi?", [
-      { text: "VazgeÃ§", style: "cancel" },
+    Alert.alert("Yerel verileri sıfırla", "Bu cihazdaki kayıtlar temizlenecek. Devam edilsin mi?", [
+      { text: "Vazgeç", style: "cancel" },
       {
-        text: "SÄ±fÄ±rla",
+        text: "Sıfırla",
         style: "destructive",
         onPress: async () => {
           setAppData(DEFAULT_DATA);
@@ -1159,7 +1159,7 @@ function AppContent() {
       [
         supportMessage.trim(),
         "",
-        `KullanÄ±cÄ±: ${authUser?.username ?? "-"}`,
+        `Kullanıcı: ${authUser?.username ?? "-"}`,
         `Platform: ${Platform.OS}`,
         `Cihaz: ${Device.modelName ?? "-"}`
       ]
@@ -1170,12 +1170,12 @@ function AppContent() {
     try {
       const canOpen = await Linking.canOpenURL(mailUrl);
       if (!canOpen) {
-        Alert.alert("Destek", "Bu cihazda e-posta uygulamasÄ± aÃ§Ä±lamadÄ±.");
+        Alert.alert("Destek", "Bu cihazda e-posta uygulaması açılamadı.");
         return;
       }
       await Linking.openURL(mailUrl);
     } catch {
-      Alert.alert("Destek", "Ä°letiÅŸim ekranÄ± aÃ§Ä±lamadÄ±.");
+      Alert.alert("Destek", "İletişim ekranı açılamadı.");
     }
   };
 
@@ -1246,7 +1246,7 @@ function AppContent() {
 
   const handleLogin = async () => {
     if (!authUsername.trim() || !authPassword.trim()) {
-      setAuthError("KullanÄ±cÄ± adÄ± ve ÅŸifre zorunludur.");
+      setAuthError("Kullanıcı adı ve şifre zorunludur.");
       return;
     }
 
@@ -1285,10 +1285,10 @@ function AppContent() {
           }
           return;
         } catch {
-          // Tercih edilen hata, Ã§evrimiÃ§i giriÅŸten dÃ¶ner.
+          // Tercih edilen hata, çevrimiçi girişten döner.
         }
       }
-      setAuthError(sanitizeUserMessage(error, "GiriÅŸ yapÄ±lamadÄ±."));
+      setAuthError(sanitizeUserMessage(error, "Giriş yapılamadı."));
     } finally {
       setAuthBusy(false);
     }
@@ -1296,12 +1296,12 @@ function AppContent() {
 
   const handleRegister = async () => {
     if (!authUsername.trim() || !authPassword.trim() || !authInviteKey.trim()) {
-      setAuthError("KullanÄ±cÄ± adÄ±, ÅŸifre ve kayÄ±t anahtarÄ± zorunludur.");
+      setAuthError("Kullanıcı adı, şifre ve kayıt anahtarı zorunludur.");
       return;
     }
 
     if (!allRequiredConsentsAccepted) {
-      setAuthError("Zorunlu onaylar tamamlanmadan kayÄ±t yapÄ±lamaz.");
+      setAuthError("Zorunlu onaylar tamamlanmadan kayıt yapılamaz.");
       return;
     }
 
@@ -1345,10 +1345,10 @@ function AppContent() {
           resetConsentForm();
           return;
         } catch {
-          // Tercih edilen hata, Ã§evrimiÃ§i kayÄ±ttan dÃ¶ner.
+          // Tercih edilen hata, çevrimiçi kayıttan döner.
         }
       }
-      setAuthError(sanitizeUserMessage(error, "KayÄ±t iÅŸlemi tamamlanamadÄ±."));
+      setAuthError(sanitizeUserMessage(error, "Kayıt işlemi tamamlanamadı."));
     } finally {
       setAuthBusy(false);
     }
@@ -1371,7 +1371,7 @@ function AppContent() {
     setAdminSelectedUser(null);
     setAdminIpBans([]);
     setAdminIpInput("");
-    setAdminIpReason("GÃ¼venlik ihlali");
+    setAdminIpReason("Güvenlik ihlali");
     setAdminBanDurationHours("");
     setDrawerVisible(false);
   };
@@ -1382,7 +1382,7 @@ function AppContent() {
       setAdminUsers(users);
       setAdminError("");
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "KullanÄ±cÄ± listesi alÄ±namadÄ±.");
+      setAdminError(error instanceof Error ? error.message : "Kullanıcı listesi alınamadı.");
     }
   };
 
@@ -1392,7 +1392,7 @@ function AppContent() {
       setAdminStats(stats);
       setAdminError("");
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "Admin istatistikleri alÄ±namadÄ±.");
+      setAdminError(error instanceof Error ? error.message : "Admin istatistikleri alınamadı.");
     }
   };
 
@@ -1402,7 +1402,7 @@ function AppContent() {
       setAdminIpBans(items);
       setAdminError("");
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "IP ban listesi alÄ±namadÄ±.");
+      setAdminError(error instanceof Error ? error.message : "IP ban listesi alınamadı.");
     }
   };
 
@@ -1412,7 +1412,7 @@ function AppContent() {
       setAdminSelectedUser(detail);
       setAdminError("");
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "KullanÄ±cÄ± detayÄ± alÄ±namadÄ±.");
+      setAdminError(error instanceof Error ? error.message : "Kullanıcı detayı alınamadı.");
     }
   };
 
@@ -1427,7 +1427,7 @@ function AppContent() {
       await refreshAdminStats();
       await refreshAdminIpBans();
     } catch (error) {
-      Alert.alert("Hata", error instanceof Error ? error.message : "Admin iÅŸlemi baÅŸarÄ±sÄ±z.");
+      Alert.alert("Hata", error instanceof Error ? error.message : "Admin işlemi başarısız.");
     } finally {
       setAdminBusy(false);
     }
@@ -1457,7 +1457,7 @@ function AppContent() {
         if (!mounted) {
           return;
         }
-        setAdminError(error instanceof Error ? error.message : "Admin panel verisi alÄ±namadÄ±.");
+        setAdminError(error instanceof Error ? error.message : "Admin panel verisi alınamadı.");
       }
     };
 
@@ -1488,7 +1488,7 @@ function AppContent() {
 
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        Alert.alert("PDF hazÄ±r", targetUri || uri);
+        Alert.alert("PDF hazır", targetUri || uri);
         return;
       }
       await Sharing.shareAsync(targetUri || uri, {
@@ -1535,7 +1535,7 @@ function AppContent() {
         record.status === "WORKED"
           ? `${calculateDailyOvertimeHours(workHours, appData.settings, record.work?.manualOvertimeOverrideHours)}`
           : "0";
-      const benefitEligible = isMealTransportEligible(dateKey, dayType, record.status, appData.halfHolidayDates) ? "Evet" : "HayÄ±r";
+      const benefitEligible = isMealTransportEligible(dateKey, dayType, record.status, appData.halfHolidayDates) ? "Evet" : "Hayır";
       rows.push({
         dateLabel: formatDateKeyTr(dateKey),
         dayType: dayTypeLabel(dayType),
@@ -1552,7 +1552,7 @@ function AppContent() {
 
   const downloadPuantajSummaryPdf = async () => {
     if (!isMonthKey(monthKey)) {
-      Alert.alert("Ay formatÄ± hatalÄ±", "Ay bilgisi YYYY-MM olmalÄ±.");
+      Alert.alert("Ay formatı hatalı", "Ay bilgisi YYYY-MM olmalı.");
       return;
     }
 
@@ -1566,38 +1566,38 @@ function AppContent() {
 
       const header = [
         `Ay: ${monthLabelTr(monthKey)} (${monthKey})`,
-        `KullanÄ±cÄ±: ${authUser?.username ?? "-"}`,
-        `Hesap dÃ¶nemi: ${periodText}`,
+        `Kullanıcı: ${authUser?.username ?? "-"}`,
+        `Hesap dönemi: ${periodText}`,
         "",
-        `MaaÅŸ dÃ¶nem gÃ¼nÃ¼: ${summary.salaryPeriodDays}`,
-        `Ã–denebilir gÃ¼n: ${summary.payableDays}`,
-        `Fiili Ã§alÄ±ÅŸÄ±lan gÃ¼n: ${summary.workedDays}`,
-        `Eksik/Ã¶denmeyen gÃ¼n: ${summary.nonPayableDays}`,
-        `MaaÅŸ hak ediÅŸ oranÄ±: %${summary.salaryRatioPercent}`,
-        `Toplam Ã§alÄ±ÅŸma saati: ${summary.totalHours}`,
+        `Maaş dönem günü: ${summary.salaryPeriodDays}`,
+        `Ödenebilir gün: ${summary.payableDays}`,
+        `Fiili çalışılan gün: ${summary.workedDays}`,
+        `Eksik/ödenmeyen gün: ${summary.nonPayableDays}`,
+        `Maaş hak ediş oranı: %${summary.salaryRatioPercent}`,
+        `Toplam çalışma saati: ${summary.totalHours}`,
         `Toplam mesai saati: ${summary.overtimeHours}`,
-        `Hak edilen maaÅŸ: ${formatCurrency(summary.baseSalary)}`,
+        `Hak edilen maaş: ${formatCurrency(summary.baseSalary)}`,
         `Rapor kesinti: ${formatCurrency(summary.reportDeduction)}`,
-        `Mesai Ã¼creti: ${formatCurrency(summary.overtimePay)}`,
-        `Pazar Ã¼creti: ${formatCurrency(summary.sundayPay)}`,
-        `UBGT Ã¼creti: ${formatCurrency(summary.ubgtPay)}`,
+        `Mesai ücreti: ${formatCurrency(summary.overtimePay)}`,
+        `Pazar ücreti: ${formatCurrency(summary.sundayPay)}`,
+        `UBGT ücreti: ${formatCurrency(summary.ubgtPay)}`,
         `Yemek toplam: ${formatCurrency(summary.mealTotal)}`,
         `Yol toplam: ${formatCurrency(summary.transportTotal)}`,
         `Hak edilen toplam: ${formatCurrency(summary.expectedTotal)}`,
-        `YatÄ±rÄ±lan toplam: ${formatCurrency(summary.paidTotal)}`,
+        `Yatırılan toplam: ${formatCurrency(summary.paidTotal)}`,
         `Fark: ${formatSignedCurrency(summary.difference)}`,
         "",
-        "Tarih;GÃ¼n Tipi;Durum;Saat;Toplam Saat;GÃ¼nlÃ¼k Mesai;Yemek/Yol;Not"
+        "Tarih;Gün Tipi;Durum;Saat;Toplam Saat;Günlük Mesai;Yemek/Yol;Not"
       ];
 
       const content = [...header, ...csvRows].join("\n");
       const html = [
         "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:18px;color:#0f172a;\">",
-        "<h1>Puantaj Ã–zeti</h1>",
+        "<h1>Puantaj Özeti</h1>",
         "<pre style=\"white-space:pre-wrap;font-family:monospace;\">" + safeText(content) + "</pre>",
         "</body></html>"
       ].join("");
-      await sharePdf(html, "Puantaj Ã–zeti PDF", `puantaj-ozeti-${monthKey}.pdf`);
+      await sharePdf(html, "Puantaj Özeti PDF", `puantaj-ozeti-${monthKey}.pdf`);
     } catch {
       Alert.alert("Hata", GENEL_HATA);
     }
@@ -1606,30 +1606,30 @@ function AppContent() {
   const downloadSalarySummaryPdf = async () => {
     const lines = [
       `Ay: ${monthLabelTr(monthKey)} (${monthKey})`,
-      `Hesap dÃ¶nemi: ${periodText}`,
+      `Hesap dönemi: ${periodText}`,
       "",
-      `MaaÅŸ dÃ¶nem gÃ¼nÃ¼: ${summary.salaryPeriodDays}`,
-      `Ã–denebilir gÃ¼n: ${summary.payableDays}`,
-      `Fiili Ã§alÄ±ÅŸÄ±lan gÃ¼n: ${summary.workedDays}`,
-      `Eksik/Ã¶denmeyen gÃ¼n: ${summary.nonPayableDays}`,
-      `MaaÅŸ hak ediÅŸ oranÄ±: %${summary.salaryRatioPercent}`,
-      `MaaÅŸ hak ediÅŸi: ${formatCurrency(summary.baseSalary)}`,
-      `Mesai hak ediÅŸi: ${formatCurrency(summary.overtimePay)}`,
-      `Pazar hak ediÅŸi: ${formatCurrency(summary.sundayPay)}`,
-      `UBGT hak ediÅŸi: ${formatCurrency(summary.ubgtPay)}`,
-      `Yemek hak ediÅŸi: ${formatCurrency(summary.mealTotal)}`,
-      `Yol hak ediÅŸi: ${formatCurrency(summary.transportTotal)}`,
-      `Toplam hak ediÅŸ: ${formatCurrency(summary.expectedTotal)}`,
-      `YatÄ±rÄ±lan toplam: ${formatCurrency(summary.paidTotal)}`,
+      `Maaş dönem günü: ${summary.salaryPeriodDays}`,
+      `Ödenebilir gün: ${summary.payableDays}`,
+      `Fiili çalışılan gün: ${summary.workedDays}`,
+      `Eksik/ödenmeyen gün: ${summary.nonPayableDays}`,
+      `Maaş hak ediş oranı: %${summary.salaryRatioPercent}`,
+      `Maaş hak edişi: ${formatCurrency(summary.baseSalary)}`,
+      `Mesai hak edişi: ${formatCurrency(summary.overtimePay)}`,
+      `Pazar hak edişi: ${formatCurrency(summary.sundayPay)}`,
+      `UBGT hak edişi: ${formatCurrency(summary.ubgtPay)}`,
+      `Yemek hak edişi: ${formatCurrency(summary.mealTotal)}`,
+      `Yol hak edişi: ${formatCurrency(summary.transportTotal)}`,
+      `Toplam hak ediş: ${formatCurrency(summary.expectedTotal)}`,
+      `Yatırılan toplam: ${formatCurrency(summary.paidTotal)}`,
       `Eksik/Fazla fark: ${formatSignedCurrency(summary.difference)}`
     ];
     const html = [
       "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:22px;color:#0f172a;\">",
-      "<h1>MaaÅŸ Ã–zeti</h1>",
+      "<h1>Maaş Özeti</h1>",
       "<pre style=\"white-space:pre-wrap;font-family:monospace;\">" + safeText(lines.join("\n")) + "</pre>",
       "</body></html>"
     ].join("");
-    await sharePdf(html, "MaaÅŸ Ã–zeti PDF", `maas-ozeti-${monthKey}.pdf`);
+    await sharePdf(html, "Maaş Özeti PDF", `maas-ozeti-${monthKey}.pdf`);
   };
 
   const downloadDailyDetailPdf = async () => {
@@ -1642,37 +1642,37 @@ function AppContent() {
       .join("\n");
     const html = [
       "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:22px;color:#0f172a;\">",
-      "<h1>GÃ¼n GÃ¼n Detay</h1>",
-      "<pre style=\"white-space:pre-wrap;font-family:monospace;\">" + safeText(table || "KayÄ±t bulunamadÄ±.") + "</pre>",
+      "<h1>Gün Gün Detay</h1>",
+      "<pre style=\"white-space:pre-wrap;font-family:monospace;\">" + safeText(table || "Kayıt bulunamadı.") + "</pre>",
       "</body></html>"
     ].join("");
-    await sharePdf(html, "GÃ¼n GÃ¼n Detay PDF", `gun-gun-detay-${monthKey}.pdf`);
+    await sharePdf(html, "Gün Gün Detay PDF", `gun-gun-detay-${monthKey}.pdf`);
   };
 
   const downloadLegalCalculationPdf = async () => {
     const dateTag = normalizedDateTag(appData.legal.hireDate, monthKey);
     const html = [
       "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:22px;color:#0f172a;line-height:1.6;\">",
-      "<h1>KÄ±dem / Ä°hbar Hesaplama Ã–zeti</h1>",
-      `<p><strong>Ä°ÅŸe giriÅŸ:</strong> ${safeText(appData.legal.hireDate || "-")}</p>`,
-      `<p><strong>Ä°ÅŸten Ã§Ä±kÄ±ÅŸ:</strong> ${safeText(appData.legal.terminationDate || "-")}</p>`,
-      `<p><strong>BrÃ¼t Ã¼cret:</strong> ${safeText(formatCurrency(appData.legal.grossSalary))}</p>`,
-      `<p><strong>AylÄ±k yemek:</strong> ${safeText(formatCurrency(appData.legal.mealAllowance))}</p>`,
-      `<p><strong>AylÄ±k yol:</strong> ${safeText(formatCurrency(appData.legal.transportAllowance))}</p>`,
-      `<p><strong>DiÄŸer dÃ¼zenli yan hak:</strong> ${safeText(formatCurrency(appData.legal.otherAllowance))}</p>`,
-      `<p><strong>Damga vergisi oranÄ±:</strong> %${safeText(String(appData.legal.stampTaxRate))}</p>`,
-      `<p><strong>KÄ±dem tavanÄ±:</strong> ${safeText(formatCurrency(appData.legal.severanceCap))}</p>`,
+      "<h1>Kıdem / İhbar Hesaplama Özeti</h1>",
+      `<p><strong>İşe giriş:</strong> ${safeText(appData.legal.hireDate || "-")}</p>`,
+      `<p><strong>İşten çıkış:</strong> ${safeText(appData.legal.terminationDate || "-")}</p>`,
+      `<p><strong>Brüt ücret:</strong> ${safeText(formatCurrency(appData.legal.grossSalary))}</p>`,
+      `<p><strong>Aylık yemek:</strong> ${safeText(formatCurrency(appData.legal.mealAllowance))}</p>`,
+      `<p><strong>Aylık yol:</strong> ${safeText(formatCurrency(appData.legal.transportAllowance))}</p>`,
+      `<p><strong>Diğer düzenli yan hak:</strong> ${safeText(formatCurrency(appData.legal.otherAllowance))}</p>`,
+      `<p><strong>Damga vergisi oranı:</strong> %${safeText(String(appData.legal.stampTaxRate))}</p>`,
+      `<p><strong>Kıdem tavanı:</strong> ${safeText(formatCurrency(appData.legal.severanceCap))}</p>`,
       `<hr />`,
-      `<p><strong>Toplam Ã§alÄ±ÅŸma sÃ¼resi:</strong> ${safeText(legalResult.serviceText)}</p>`,
-      `<p><strong>KÄ±dem tazminatÄ± (tahmini):</strong> ${safeText(formatCurrency(legalResult.severancePayNet))}</p>`,
-      `<p><strong>Ä°hbar sÃ¼resi:</strong> ${safeText(`${legalResult.noticeWeeks} hafta`)}</p>`,
-      `<p><strong>Ä°hbar tazminatÄ± (tahmini):</strong> ${safeText(formatCurrency(legalResult.noticePay))}</p>`,
-      `<p><strong>KullanÄ±lmayan izin Ã¼creti (tahmini):</strong> ${safeText(formatCurrency(legalResult.annualLeavePay))}</p>`,
+      `<p><strong>Toplam çalışma süresi:</strong> ${safeText(legalResult.serviceText)}</p>`,
+      `<p><strong>Kıdem tazminatı (tahmini):</strong> ${safeText(formatCurrency(legalResult.severancePayNet))}</p>`,
+      `<p><strong>İhbar süresi:</strong> ${safeText(`${legalResult.noticeWeeks} hafta`)}</p>`,
+      `<p><strong>İhbar tazminatı (tahmini):</strong> ${safeText(formatCurrency(legalResult.noticePay))}</p>`,
+      `<p><strong>Kullanılmayan izin ücreti (tahmini):</strong> ${safeText(formatCurrency(legalResult.annualLeavePay))}</p>`,
       `<p><strong>Toplam tahmini alacak:</strong> ${safeText(formatCurrency(legalResult.estimatedTotal))}</p>`,
       `<p style="margin-top:18px;font-size:12px;">${safeText(HUKUK_UYARI_METNI)}</p>`,
       "</body></html>"
     ].join("");
-    await sharePdf(html, "KÄ±dem / Ä°hbar PDF", `kidem-ihbar-${dateTag}.pdf`);
+    await sharePdf(html, "Kıdem / İhbar PDF", `kidem-ihbar-${dateTag}.pdf`);
   };
 
   const downloadResignationPdf = async () => {
@@ -1681,12 +1681,12 @@ function AppContent() {
 
     const html = [
       "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:20px;color:#0f172a;line-height:1.6;white-space:pre-wrap;\">",
-      "<h1>Ä°stifa / Fesih DilekÃ§esi</h1>",
+      "<h1>İstifa / Fesih Dilekçesi</h1>",
       safeText(draft),
       "</body></html>"
     ].join("");
 
-    await sharePdf(html, "Ä°stifa DilekÃ§esi PDF", `istifa-dilekcesi-${dateTag}.pdf`);
+    await sharePdf(html, "İstifa Dilekçesi PDF", `istifa-dilekcesi-${dateTag}.pdf`);
   };
 
   if (!loaded) {
@@ -1694,7 +1694,7 @@ function AppContent() {
       <SafeAreaView style={[styles.centered, Platform.OS === "android" ? styles.androidTopInset : null]}>
         <ExpoStatusBar style={effectiveDarkMode ? "light" : "dark"} />
         <ActivityIndicator size="large" color="#0f766e" />
-        <Text style={styles.helper}>Veriler yÃ¼kleniyor...</Text>
+        <Text style={styles.helper}>Veriler yükleniyor...</Text>
       </SafeAreaView>
     );
   }
@@ -1711,26 +1711,26 @@ function AppContent() {
           <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
             <View style={styles.authHeroCard}>
               <Text style={styles.authBadge}>AYFSOFT</Text>
-              <Text style={styles.authTitle}>Puantaj ve MaaÅŸ Takip</Text>
+              <Text style={styles.authTitle}>Puantaj ve Maaş Takip</Text>
               <Text style={styles.authSubtitle}>
-                GÃ¼venli giriÅŸ yap, vardiyalarÄ±nÄ± yÃ¶net, hesaplamalarÄ±nÄ± anlÄ±k takip et.
+                Güvenli giriş yap, vardiyalarını yönet, hesaplamalarını anlık takip et.
               </Text>
               <View style={styles.authTrustRow}>
                 <View style={styles.authTrustItem}>
                   <Text style={styles.authTrustValue}>45s</Text>
-                  <Text style={styles.authTrustLabel}>HaftalÄ±k eÅŸik</Text>
+                  <Text style={styles.authTrustLabel}>Haftalık eşik</Text>
                 </View>
                 <View style={styles.authTrustItem}>
                   <Text style={styles.authTrustValue}>225s</Text>
-                  <Text style={styles.authTrustLabel}>AylÄ±k eÅŸik</Text>
+                  <Text style={styles.authTrustLabel}>Aylık eşik</Text>
                 </View>
                 <View style={styles.authTrustItem}>
                   <Text style={styles.authTrustValue}>KVKK</Text>
-                  <Text style={styles.authTrustLabel}>GÃ¼venli kayÄ±t</Text>
+                  <Text style={styles.authTrustLabel}>Güvenli kayıt</Text>
                 </View>
               </View>
               <Pressable style={styles.legalChip} onPress={() => setLegalModalVisible(true)}>
-                <Text style={styles.legalChipText}>KVKK, Gizlilik, Ã‡erez, Cihaz Verisi ve Yasal Sorumluluklar</Text>
+                <Text style={styles.legalChipText}>KVKK, Gizlilik, Çerez, Cihaz Verisi ve Yasal Sorumluluklar</Text>
               </Pressable>
             </View>
 
@@ -1743,7 +1743,7 @@ function AppContent() {
                   <Text
                     style={[styles.authModeButtonText, authMode === "USER_LOGIN" ? styles.authModeButtonTextActive : null]}
                   >
-                    KullanÄ±cÄ± GiriÅŸi
+                    Kullanıcı Girişi
                   </Text>
                 </Pressable>
                 <Pressable
@@ -1753,14 +1753,14 @@ function AppContent() {
                   <Text
                     style={[styles.authModeButtonText, authMode === "USER_REGISTER" ? styles.authModeButtonTextActive : null]}
                   >
-                    KayÄ±t Ol
+                    Kayıt Ol
                   </Text>
                 </Pressable>
               </View>
 
               {authMode === "USER_REGISTER" ? (
                 <>
-                  <Text style={styles.label}>KayÄ±t anahtarÄ±</Text>
+                  <Text style={styles.label}>Kayıt anahtarı</Text>
                   <TextInput
                     ref={inviteKeyInputRef}
                     value={authInviteKey}
@@ -1770,7 +1770,7 @@ function AppContent() {
                     }}
                     secureTextEntry
                     style={styles.input}
-                    placeholder="KayÄ±t anahtarÄ±nÄ± girin"
+                    placeholder="Kayıt anahtarını girin"
                     returnKeyType="next"
                     onSubmitEditing={() => usernameInputRef.current?.focus()}
                     blurOnSubmit={false}
@@ -1778,7 +1778,7 @@ function AppContent() {
                 </>
               ) : null}
 
-              <Text style={styles.label}>KullanÄ±cÄ± adÄ±</Text>
+              <Text style={styles.label}>Kullanıcı adı</Text>
               <TextInput
                 ref={usernameInputRef}
                 value={authUsername}
@@ -1789,13 +1789,13 @@ function AppContent() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={styles.input}
-                placeholder="KullanÄ±cÄ± adÄ±nÄ±zÄ± girin"
+                placeholder="Kullanıcı adınızı girin"
                 returnKeyType="next"
                 onSubmitEditing={() => passwordInputRef.current?.focus()}
                 blurOnSubmit={false}
               />
 
-              <Text style={styles.label}>Åifre</Text>
+              <Text style={styles.label}>Şifre</Text>
               <TextInput
                 ref={passwordInputRef}
                 value={authPassword}
@@ -1822,32 +1822,32 @@ function AppContent() {
                   <ConsentCheck
                     checked={consentKvkk}
                     onToggle={() => setConsentKvkk((prev) => !prev)}
-                    text="KVKK AydÄ±nlatma Metni'ni okudum ve kabul ediyorum."
+                    text="KVKK Aydınlatma Metni'ni okudum ve kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentAcikRiza}
                     onToggle={() => setConsentAcikRiza((prev) => !prev)}
-                    text="AÃ§Ä±k RÄ±za Metni'ni onaylÄ±yorum."
+                    text="Açık Rıza Metni'ni onaylıyorum."
                   />
                   <ConsentCheck
                     checked={consentGizlilik}
                     onToggle={() => setConsentGizlilik((prev) => !prev)}
-                    text="Gizlilik PolitikasÄ±'nÄ± okudum ve kabul ediyorum."
+                    text="Gizlilik Politikası'nı okudum ve kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentCerez}
                     onToggle={() => setConsentCerez((prev) => !prev)}
-                    text="Ã‡erez PolitikasÄ±'nÄ± kabul ediyorum."
+                    text="Çerez Politikası'nı kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentCihazVerisi}
                     onToggle={() => setConsentCihazVerisi((prev) => !prev)}
-                    text="Cihaz Verisi PolitikasÄ±'nÄ± kabul ediyorum."
+                    text="Cihaz Verisi Politikası'nı kabul ediyorum."
                   />
                   <ConsentCheck
                     checked={consentYasalSorumluluk}
                     onToggle={() => setConsentYasalSorumluluk((prev) => !prev)}
-                    text="Yasal Sorumluluk Reddi ve KullanÄ±m ÅartlarÄ±'nÄ± kabul ediyorum."
+                    text="Yasal Sorumluluk Reddi ve Kullanım Şartları'nı kabul ediyorum."
                   />
                 </View>
               ) : null}
@@ -1856,11 +1856,11 @@ function AppContent() {
 
               {authMode === "USER_REGISTER" ? (
                 <Pressable style={styles.primaryButton} onPress={handleRegister} disabled={authBusy}>
-                  <Text style={styles.primaryButtonText}>{authBusy ? "KayÄ±t yapÄ±lÄ±yor..." : "KayÄ±t Ol"}</Text>
+                  <Text style={styles.primaryButtonText}>{authBusy ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Text>
                 </Pressable>
               ) : (
                 <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={authBusy}>
-                  <Text style={styles.primaryButtonText}>{authBusy ? "GiriÅŸ yapÄ±lÄ±yor..." : "GiriÅŸ Yap"}</Text>
+                  <Text style={styles.primaryButtonText}>{authBusy ? "Giriş yapılıyor..." : "Giriş Yap"}</Text>
                 </Pressable>
               )}
             </View>
@@ -1906,13 +1906,13 @@ return (
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <Pressable style={styles.menuButton} onPress={openDrawer}>
-            <Text style={styles.menuButtonText}>â˜°</Text>
+            <Text style={styles.menuButtonText}>☰</Text>
           </Pressable>
-          <Text style={styles.title}>Puantaj MaaÅŸ Hesap</Text>
+          <Text style={styles.title}>Puantaj Maaş Hesap</Text>
         </View>
-        <Text style={styles.subtitle}>Takvim, dÃ¶nem Ã¶zeti ve hukuki bilgilendirme tek ekranda.</Text>
+        <Text style={styles.subtitle}>Takvim, dönem özeti ve hukuki bilgilendirme tek ekranda.</Text>
         <View style={styles.headerInfoRow}>
-          <Text style={styles.helper}>{authUser.role === "ADMIN" ? "YÃ¶netici" : "KullanÄ±cÄ±"}: {authUser.username}</Text>
+          <Text style={styles.helper}>{authUser.role === "ADMIN" ? "Yönetici" : "Kullanıcı"}: {authUser.username}</Text>
         </View>
         <View style={styles.saveTextSlot}>
           <Text style={[styles.saveText, !saving ? styles.saveTextHidden : null]}>Kaydediliyor...</Text>
@@ -1935,7 +1935,7 @@ return (
               </Pressable>
             </View>
             <Pressable style={styles.todayButton} onPress={() => setMonthKey(todayKey.slice(0, 7))}>
-              <Text style={styles.todayButtonText}>BugÃ¼ne Git</Text>
+              <Text style={styles.todayButtonText}>Bugüne Git</Text>
             </Pressable>
 
             <View style={styles.calendarLegend}>
@@ -1943,39 +1943,39 @@ return (
               <LegendItem color="#312e81" text="Pazar" />
               <LegendItem color="#7f1d1d" text="UBGT" />
               <LegendItem color="#92400e" text="Raporlu" />
-              <LegendItem color="#1e3a8a" text="Ä°zinli" />
-              <LegendItem color="#7c2d12" text="YÄ±llÄ±k" />
+              <LegendItem color="#1e3a8a" text="İzinli" />
+              <LegendItem color="#7c2d12" text="Yıllık" />
               <LegendItem color="#334155" text="Tatil" />
-              <LegendItem color="#0f172a" text="BoÅŸ" />
+              <LegendItem color="#0f172a" text="Boş" />
             </View>
 
-            {isMonthClosed ? <Text style={styles.closedBadge}>Bu ay kapalÄ±, deÄŸiÅŸiklik yapÄ±lamaz.</Text> : null}
+            {isMonthClosed ? <Text style={styles.closedBadge}>Bu ay kapalı, değişiklik yapılamaz.</Text> : null}
 
-            <SummaryCard title="Toplu Ä°ÅŸlem">
-              <InfoRow label="SeÃ§ili gÃ¼n sayÄ±sÄ±" value={`${bulkRangeDateKeys.length}`} />
+            <SummaryCard title="Toplu İşlem">
+              <InfoRow label="Seçili gün sayısı" value={`${bulkRangeDateKeys.length}`} />
               <Pressable style={styles.secondaryButton} onPress={toggleBulkMode}>
-                <Text style={styles.secondaryButtonText}>{bulkSelectMode ? "Toplu Ä°ÅŸlemi Kapat" : "Toplu Ä°ÅŸlemi AÃ§"}</Text>
+                <Text style={styles.secondaryButtonText}>{bulkSelectMode ? "Toplu İşlemi Kapat" : "Toplu İşlemi Aç"}</Text>
               </Pressable>
               <Text style={styles.helper}>
                 {bulkRangeDateKeys.length > 0
-                  ? `SeÃ§ili aralÄ±k: ${formatDateKeyTr(bulkRangeDateKeys[0])} - ${formatDateKeyTr(
+                  ? `Seçili aralık: ${formatDateKeyTr(bulkRangeDateKeys[0])} - ${formatDateKeyTr(
                       bulkRangeDateKeys[bulkRangeDateKeys.length - 1]
-                    )} (${bulkRangeDateKeys.length} gÃ¼n)`
-                  : "Takvimde gÃ¼ne uzun basarak aralÄ±k seÃ§."}
+                    )} (${bulkRangeDateKeys.length} gün)`
+                  : "Takvimde güne uzun basarak aralık seç."}
               </Text>
               {bulkSelectMode ? (
                 <View style={styles.optionWrap}>
                   <Pressable style={styles.optionButton} onPress={() => applyBulkDayStatus("WORKED")}>
-                    <Text style={styles.optionButtonText}>Ã‡alÄ±ÅŸtÄ±m</Text>
+                    <Text style={styles.optionButtonText}>Çalıştım</Text>
                   </Pressable>
                   <Pressable style={styles.optionButton} onPress={() => applyBulkDayStatus("LEAVE")}>
-                    <Text style={styles.optionButtonText}>Ä°zinli</Text>
+                    <Text style={styles.optionButtonText}>İzinli</Text>
                   </Pressable>
                   <Pressable style={styles.optionButton} onPress={() => applyBulkDayStatus("REPORT")}>
                     <Text style={styles.optionButtonText}>Raporlu</Text>
                   </Pressable>
                   <Pressable style={styles.optionButton} onPress={() => applyBulkDayStatus("ANNUAL_LEAVE")}>
-                    <Text style={styles.optionButtonText}>YÄ±llÄ±k Ä°zin</Text>
+                    <Text style={styles.optionButtonText}>Yıllık İzin</Text>
                   </Pressable>
                   <Pressable style={styles.optionButton} onPress={() => applyBulkDayStatus("HOLIDAY_OFF")}>
                     <Text style={styles.optionButtonText}>Tatil</Text>
@@ -2068,7 +2068,7 @@ return (
                         </Text>
 
                         <Text numberOfLines={1} style={styles.dayTag}>
-                          {isToday ? "BugÃ¼n" : dayType === "UBGT" ? "UBGT" : dayType === "SUNDAY" ? "Pazar" : ""}
+                          {isToday ? "Bugün" : dayType === "UBGT" ? "UBGT" : dayType === "SUNDAY" ? "Pazar" : ""}
                         </Text>
                       </Pressable>
                     );
@@ -2078,7 +2078,7 @@ return (
             </View>
 
             <View style={styles.monthDiffBox}>
-              <Text style={styles.infoLabel}>Bu ay farkÄ±:</Text>
+              <Text style={styles.infoLabel}>Bu ay farkı:</Text>
               <Text style={[styles.monthDiffValue, { color: differenceColor(summary.difference) }]}>
                 {formatSignedCurrency(summary.difference)} ({monthlyDifferenceLabel(summary.difference)})
               </Text>
@@ -2088,77 +2088,77 @@ return (
 
         {activeTab === "SUMMARY" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>DÃ¶nem Ã–zeti</Text>
+            <Text style={styles.sectionTitle}>Dönem Özeti</Text>
             <Text style={styles.helper}>{monthLabelTr(monthKey)}</Text>
             {analytics.salaryWarning ? <Text style={styles.error}>{analytics.salaryWarning}</Text> : null}
 
             <View style={styles.optionWrap}>
               <Pressable style={styles.secondaryButton} onPress={downloadSalarySummaryPdf}>
-                <Text style={styles.secondaryButtonText}>MaaÅŸ Ã–zeti PDF</Text>
+                <Text style={styles.secondaryButtonText}>Maaş Özeti PDF</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={downloadPuantajSummaryPdf}>
-                <Text style={styles.secondaryButtonText}>Puantaj Ã–zeti PDF</Text>
+                <Text style={styles.secondaryButtonText}>Puantaj Özeti PDF</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={downloadDailyDetailPdf}>
-                <Text style={styles.secondaryButtonText}>GÃ¼n GÃ¼n Detay PDF</Text>
+                <Text style={styles.secondaryButtonText}>Gün Gün Detay PDF</Text>
               </Pressable>
             </View>
 
-            <SummaryCard title="DÃ¶nemler">
-              <InfoRow label="Hesap dÃ¶nemi" value={periodText} />
-              <InfoRow label="DÃ¶nem gÃ¼nÃ¼" value={`${summary.salaryPeriodDays}`} />
-              <InfoRow label="Ã–denebilir gÃ¼n" value={`${summary.payableDays}`} />
-              <InfoRow label="Fiili Ã§alÄ±ÅŸÄ±lan gÃ¼n" value={`${summary.workedDays}`} />
-              <InfoRow label="Eksik/Ã¶denmeyen gÃ¼n" value={`${summary.nonPayableDays}`} />
-              <InfoRow label="MaaÅŸ hak ediÅŸ oranÄ±" value={`%${summary.salaryRatioPercent}`} />
-              <InfoRow label="MaaÅŸ hak ediÅŸi" value={formatCurrency(summary.baseSalary)} strong />
+            <SummaryCard title="Dönemler">
+              <InfoRow label="Hesap dönemi" value={periodText} />
+              <InfoRow label="Dönem günü" value={`${summary.salaryPeriodDays}`} />
+              <InfoRow label="Ödenebilir gün" value={`${summary.payableDays}`} />
+              <InfoRow label="Fiili çalışılan gün" value={`${summary.workedDays}`} />
+              <InfoRow label="Eksik/ödenmeyen gün" value={`${summary.nonPayableDays}`} />
+              <InfoRow label="Maaş hak ediş oranı" value={`%${summary.salaryRatioPercent}`} />
+              <InfoRow label="Maaş hak edişi" value={formatCurrency(summary.baseSalary)} strong />
             </SummaryCard>
 
-            <SummaryCard title="Ã‡alÄ±ÅŸma Durumu">
-              <InfoRow label="Ã‡alÄ±ÅŸÄ±lan gÃ¼n" value={`${summary.workedDays}`} />
-              <InfoRow label="Ä°zinli gÃ¼n" value={`${summary.leaveDays}`} />
-              <InfoRow label="YÄ±llÄ±k izin" value={`${summary.annualLeaveDays}`} />
-              <InfoRow label="Raporlu gÃ¼n" value={`${summary.reportDays}`} />
-              <InfoRow label="Tatil gÃ¼n" value={`${summary.holidayOffDays}`} />
-              <InfoRow label="Normal gÃ¼n" value={`${summary.normalWorkedDays}`} />
-              <InfoRow label="Pazar gÃ¼n" value={`${summary.sundayWorkedDays}`} />
-              <InfoRow label="UBGT gÃ¼n" value={`${summary.ubgtWorkedDays}`} />
-              <InfoRow label="Toplam Ã§alÄ±ÅŸma saati" value={`${summary.totalHours} saat`} />
-              <InfoRow label="GÃ¼nlÃ¼k 7.5 saat aÅŸÄ±mÄ±" value={`${summary.dailyOvertimeHours} saat`} />
-              <InfoRow label="HaftalÄ±k 45 saat aÅŸÄ±mÄ±" value={`${summary.weeklyOvertimeRawHours} saat`} />
-              <InfoRow label="HaftalÄ±k ilave mesai" value={`${summary.weeklyAdditionalOvertimeHours} saat`} />
-              <InfoRow label="AylÄ±k 225 saat aÅŸÄ±mÄ±" value={`${summary.monthlyOvertimeRawHours} saat`} />
-              <InfoRow label="AylÄ±k ilave mesai" value={`${summary.monthlyAdditionalOvertimeHours} saat`} />
-              <InfoRow label="Ã‡ifte sayÄ±m dÃ¼ÅŸÃ¼lmÃ¼ÅŸ toplam" value={`${summary.overtimeHours} saat`} />
-              <InfoRow label="GÃ¼nlÃ¼k ortalama mesai" value={`${summary.averageDailyOvertime} saat`} />
+            <SummaryCard title="Çalışma Durumu">
+              <InfoRow label="Çalışılan gün" value={`${summary.workedDays}`} />
+              <InfoRow label="İzinli gün" value={`${summary.leaveDays}`} />
+              <InfoRow label="Yıllık izin" value={`${summary.annualLeaveDays}`} />
+              <InfoRow label="Raporlu gün" value={`${summary.reportDays}`} />
+              <InfoRow label="Tatil gün" value={`${summary.holidayOffDays}`} />
+              <InfoRow label="Normal gün" value={`${summary.normalWorkedDays}`} />
+              <InfoRow label="Pazar gün" value={`${summary.sundayWorkedDays}`} />
+              <InfoRow label="UBGT gün" value={`${summary.ubgtWorkedDays}`} />
+              <InfoRow label="Toplam çalışma saati" value={`${summary.totalHours} saat`} />
+              <InfoRow label="Günlük 7.5 saat aşımı" value={`${summary.dailyOvertimeHours} saat`} />
+              <InfoRow label="Haftalık 45 saat aşımı" value={`${summary.weeklyOvertimeRawHours} saat`} />
+              <InfoRow label="Haftalık ilave mesai" value={`${summary.weeklyAdditionalOvertimeHours} saat`} />
+              <InfoRow label="Aylık 225 saat aşımı" value={`${summary.monthlyOvertimeRawHours} saat`} />
+              <InfoRow label="Aylık ilave mesai" value={`${summary.monthlyAdditionalOvertimeHours} saat`} />
+              <InfoRow label="Çifte sayım düşülmüş toplam" value={`${summary.overtimeHours} saat`} />
+              <InfoRow label="Günlük ortalama mesai" value={`${summary.averageDailyOvertime} saat`} />
             </SummaryCard>
 
-            <SummaryCard title="Hak EdiÅŸ">
-              <InfoRow label="Saatlik Ã¼cret" value={formatCurrency(summary.hourlyRate)} />
-              <InfoRow label="Fazla mesai katsayÄ±sÄ±" value={`${appData.settings.coefficients.overtime}`} />
-              <InfoRow label="MaaÅŸ hak ediÅŸi" value={formatCurrency(summary.baseSalary)} />
-              <InfoRow label="DÃ¶nem kesintisi" value={formatCurrency(summary.reportDeduction)} />
-              <InfoRow label="Mesai hak ediÅŸi" value={formatCurrency(summary.overtimePay)} />
-              <InfoRow label="Pazar hak ediÅŸi" value={formatCurrency(summary.sundayPay)} />
-              <InfoRow label="UBGT hak ediÅŸi" value={formatCurrency(summary.ubgtPay)} />
+            <SummaryCard title="Hak Ediş">
+              <InfoRow label="Saatlik ücret" value={formatCurrency(summary.hourlyRate)} />
+              <InfoRow label="Fazla mesai katsayısı" value={`${appData.settings.coefficients.overtime}`} />
+              <InfoRow label="Maaş hak edişi" value={formatCurrency(summary.baseSalary)} />
+              <InfoRow label="Dönem kesintisi" value={formatCurrency(summary.reportDeduction)} />
+              <InfoRow label="Mesai hak edişi" value={formatCurrency(summary.overtimePay)} />
+              <InfoRow label="Pazar hak edişi" value={formatCurrency(summary.sundayPay)} />
+              <InfoRow label="UBGT hak edişi" value={formatCurrency(summary.ubgtPay)} />
             </SummaryCard>
 
             <SummaryCard title="Yemek / Yol">
-              <InfoRow label="AylÄ±k yemek" value={formatCurrency(summary.monthlyMealAllowance)} />
-              <InfoRow label="AylÄ±k yol" value={formatCurrency(summary.monthlyTransportAllowance)} />
-              <InfoRow label="Yemek hak edilen gÃ¼n" value={`${summary.mealEntitledDays}`} />
-              <InfoRow label="Yol hak edilen gÃ¼n" value={`${summary.transportEntitledDays}`} />
-              <InfoRow label="Yemek gÃ¼nlÃ¼k oran" value={formatCurrency(summary.mealDailyRate)} />
-              <InfoRow label="Yol gÃ¼nlÃ¼k oran" value={formatCurrency(summary.transportDailyRate)} />
-              <InfoRow label="Yemek hak ediÅŸi" value={formatCurrency(summary.mealTotal)} />
-              <InfoRow label="Yol hak ediÅŸi" value={formatCurrency(summary.transportTotal)} />
+              <InfoRow label="Aylık yemek" value={formatCurrency(summary.monthlyMealAllowance)} />
+              <InfoRow label="Aylık yol" value={formatCurrency(summary.monthlyTransportAllowance)} />
+              <InfoRow label="Yemek hak edilen gün" value={`${summary.mealEntitledDays}`} />
+              <InfoRow label="Yol hak edilen gün" value={`${summary.transportEntitledDays}`} />
+              <InfoRow label="Yemek günlük oran" value={formatCurrency(summary.mealDailyRate)} />
+              <InfoRow label="Yol günlük oran" value={formatCurrency(summary.transportDailyRate)} />
+              <InfoRow label="Yemek hak edişi" value={formatCurrency(summary.mealTotal)} />
+              <InfoRow label="Yol hak edişi" value={formatCurrency(summary.transportTotal)} />
               <InfoRow label="Toplam yan hak" value={formatCurrency(summary.sideBenefitsTotal)} strong />
             </SummaryCard>
 
             <SummaryCard title="Eksik / Fazla">
-              {isMonthClosed ? <Text style={styles.error}>Ay kapalÄ± olduÄŸu iÃ§in Ã¶demeler deÄŸiÅŸtirilemez.</Text> : null}
+              {isMonthClosed ? <Text style={styles.error}>Ay kapalı olduğu için ödemeler değiştirilemez.</Text> : null}
 
-              <Text style={styles.label}>YatÄ±rÄ±lan maaÅŸ</Text>
+              <Text style={styles.label}>Yatırılan maaş</Text>
               <TextInput
                 value={paymentInputs.salary}
                 onChangeText={(value) => updateMonthPaymentInput("salary", value)}
@@ -2167,7 +2167,7 @@ return (
                 editable={!isMonthClosed}
               />
 
-              <Text style={styles.label}>YatÄ±rÄ±lan mesai</Text>
+              <Text style={styles.label}>Yatırılan mesai</Text>
               <TextInput
                 value={paymentInputs.overtime}
                 onChangeText={(value) => updateMonthPaymentInput("overtime", value)}
@@ -2176,7 +2176,7 @@ return (
                 editable={!isMonthClosed}
               />
 
-              <Text style={styles.label}>YatÄ±rÄ±lan pazar</Text>
+              <Text style={styles.label}>Yatırılan pazar</Text>
               <TextInput
                 value={paymentInputs.sunday}
                 onChangeText={(value) => updateMonthPaymentInput("sunday", value)}
@@ -2185,7 +2185,7 @@ return (
                 editable={!isMonthClosed}
               />
 
-              <Text style={styles.label}>YatÄ±rÄ±lan UBGT</Text>
+              <Text style={styles.label}>Yatırılan UBGT</Text>
               <TextInput
                 value={paymentInputs.ubgt}
                 onChangeText={(value) => updateMonthPaymentInput("ubgt", value)}
@@ -2194,7 +2194,7 @@ return (
                 editable={!isMonthClosed}
               />
 
-              <Text style={styles.label}>YatÄ±rÄ±lan yemek</Text>
+              <Text style={styles.label}>Yatırılan yemek</Text>
               <TextInput
                 value={paymentInputs.meal}
                 onChangeText={(value) => updateMonthPaymentInput("meal", value)}
@@ -2203,7 +2203,7 @@ return (
                 editable={!isMonthClosed}
               />
 
-              <Text style={styles.label}>YatÄ±rÄ±lan yol</Text>
+              <Text style={styles.label}>Yatırılan yol</Text>
               <TextInput
                 value={paymentInputs.transport}
                 onChangeText={(value) => updateMonthPaymentInput("transport", value)}
@@ -2217,11 +2217,11 @@ return (
                 onPress={saveMonthPayment}
                 disabled={isMonthClosed}
               >
-                <Text style={styles.secondaryButtonText}>Ã–demeyi Kaydet</Text>
+                <Text style={styles.secondaryButtonText}>Ödemeyi Kaydet</Text>
               </Pressable>
 
-              <InfoRow label="Toplam hak ediÅŸ" value={formatCurrency(summary.expectedTotal)} strong />
-              <InfoRow label="YatÄ±rÄ±lan toplam" value={formatCurrency(summary.paidTotal)} strong />
+              <InfoRow label="Toplam hak ediş" value={formatCurrency(summary.expectedTotal)} strong />
+              <InfoRow label="Yatırılan toplam" value={formatCurrency(summary.paidTotal)} strong />
               <InfoRow
                 label="Fark"
                 value={`${formatSignedCurrency(summary.difference)} (${monthlyDifferenceLabel(summary.difference)})`}
@@ -2230,32 +2230,32 @@ return (
               />
             </SummaryCard>
 
-            <SummaryCard title="Toplam Alacak / BorÃ§">
+            <SummaryCard title="Toplam Alacak / Borç">
               {totalDifference < 0 ? (
                 <InfoRow
-                  label="Toplam alacaÄŸÄ±n"
+                  label="Toplam alacağın"
                   value={formatCurrency(Math.abs(totalDifference))}
                   strong
                   valueColor="#b91c1c"
                 />
               ) : totalDifference > 0 ? (
                 <InfoRow
-                  label="Fazla alÄ±nan"
+                  label="Fazla alınan"
                   value={formatSignedCurrency(totalDifference)}
                   strong
                   valueColor="#15803d"
                 />
               ) : (
-                <InfoRow label="Toplam durum" value="EÅŸit" strong valueColor="#475569" />
+                <InfoRow label="Toplam durum" value="Eşit" strong valueColor="#475569" />
               )}
             </SummaryCard>
 
             <SummaryCard title="Analiz">
-              <InfoRow label="MaaÅŸ Ã¶deme gÃ¼nÃ¼" value={`${analytics.salaryPaymentDay}`} />
-              <InfoRow label="AylÄ±k hedef kazanÃ§" value={formatCurrency(analytics.monthlyTarget)} />
-              <InfoRow label="Hedefe ulaÅŸma" value={`%${analytics.targetProgressPercent}`} />
+              <InfoRow label="Maaş ödeme günü" value={`${analytics.salaryPaymentDay}`} />
+              <InfoRow label="Aylık hedef kazanç" value={formatCurrency(analytics.monthlyTarget)} />
+              <InfoRow label="Hedefe ulaşma" value={`%${analytics.targetProgressPercent}`} />
               <InfoRow
-                label="En Ã§ok kazandÄ±ran gÃ¼n"
+                label="En çok kazandıran gün"
                 value={
                   analytics.mostEarningDayKey
                     ? `${formatDateKeyTr(analytics.mostEarningDayKey)} (${formatCurrency(analytics.mostEarningDayAmount)})`
@@ -2263,16 +2263,16 @@ return (
                 }
               />
               <InfoRow
-                label="En Ã§ok Ã§alÄ±ÅŸÄ±lan hafta gÃ¼nÃ¼"
+                label="En çok çalışılan hafta günü"
                 value={
                   analytics.mostWorkedWeekdayLabel
                     ? `${analytics.mostWorkedWeekdayLabel} (${analytics.mostWorkedWeekdayCount})`
                     : "-"
                 }
               />
-              <InfoRow label="Ã‡alÄ±ÅŸma oranÄ±" value={`%${analytics.workRatePercent}`} />
-              <InfoRow label="Rapor oranÄ±" value={`%${analytics.reportRatePercent}`} />
-              <InfoRow label="Ä°zin oranÄ±" value={`%${analytics.leaveRatePercent}`} />
+              <InfoRow label="Çalışma oranı" value={`%${analytics.workRatePercent}`} />
+              <InfoRow label="Rapor oranı" value={`%${analytics.reportRatePercent}`} />
+              <InfoRow label="İzin oranı" value={`%${analytics.leaveRatePercent}`} />
             </SummaryCard>
 
           </View>
@@ -2282,10 +2282,10 @@ return (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Ayarlar</Text>
             <SummaryCard title="Hesap Bilgisi">
-              <InfoRow label="KullanÄ±cÄ±" value={authUser.username} />
-              <InfoRow label="Rol" value={authUser.role === "ADMIN" ? "YÃ¶netici" : "KullanÄ±cÄ±"} />
+              <InfoRow label="Kullanıcı" value={authUser.username} />
+              <InfoRow label="Rol" value={authUser.role === "ADMIN" ? "Yönetici" : "Kullanıcı"} />
             </SummaryCard>
-            <SummaryCard title="KiÅŸisel Bilgiler">
+            <SummaryCard title="Kişisel Bilgiler">
               <View style={styles.profileRow}>
                 {appData.profile.avatarUrl.trim() ? (
                   <Image source={{ uri: appData.profile.avatarUrl.trim() }} style={styles.profileAvatar} />
@@ -2296,12 +2296,12 @@ return (
                     </Text>
                   </View>
                 )}
-                <Text style={styles.helper}>Profil fotoÄŸrafÄ±nÄ± galeriden seÃ§ebilirsiniz.</Text>
+                <Text style={styles.helper}>Profil fotoğrafını galeriden seçebilirsiniz.</Text>
               </View>
 
               <View style={styles.row}>
                 <Pressable style={[styles.secondaryButton, styles.flexInput]} onPress={() => void pickProfileImage()}>
-                  <Text style={styles.secondaryButtonText}>Galeriden FotoÄŸraf SeÃ§</Text>
+                  <Text style={styles.secondaryButtonText}>Galeriden Fotoğraf Seç</Text>
                 </Pressable>
                 {appData.profile.avatarUrl.trim() ? (
                   <Pressable
@@ -2314,7 +2314,7 @@ return (
                       setProfileField("avatarUrl", "");
                     }}
                   >
-                    <Text style={styles.deleteButtonText}>FotoÄŸrafÄ± KaldÄ±r</Text>
+                    <Text style={styles.deleteButtonText}>Fotoğrafı Kaldır</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -2363,15 +2363,15 @@ return (
                   }))
                 }
               >
-                <Text style={styles.deleteButtonText}>KiÅŸisel Bilgileri Temizle</Text>
+                <Text style={styles.deleteButtonText}>Kişisel Bilgileri Temizle</Text>
               </Pressable>
             </SummaryCard>
-            <SummaryCard title="GÃ¼venlik">
+            <SummaryCard title="Güvenlik">
               <Text style={styles.helper}>
-                HesabÄ±nÄ±z bu cihazda gÃ¼venli ÅŸekilde tutulur. Ã‡Ä±kÄ±ÅŸ yaptÄ±ÄŸÄ±nÄ±zda oturum kapatÄ±lÄ±r.
+                Hesabınız bu cihazda güvenli şekilde tutulur. Çıkış yaptığınızda oturum kapatılır.
               </Text>
               <Pressable style={styles.deleteButton} onPress={handleLogout}>
-                <Text style={styles.deleteButtonText}>Ã‡Ä±kÄ±ÅŸ Yap</Text>
+                <Text style={styles.deleteButtonText}>Çıkış Yap</Text>
               </Pressable>
             </SummaryCard>
           </View>
@@ -2380,18 +2380,18 @@ return (
         {activeTab === "SUPPORT" ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Destek</Text>
-            <SummaryCard title="Ä°letiÅŸime GeÃ§">
+            <SummaryCard title="İletişime Geç">
               <Text style={styles.helper}>
-                Sorununuzu kÄ±sa ve net yazarak destek talebi oluÅŸturabilirsiniz.
+                Sorununuzu kısa ve net yazarak destek talebi oluşturabilirsiniz.
               </Text>
               <InfoRow label="Destek e-posta" value="yusufavsarsgu@gmail.com" />
-              <InfoRow label="Ã‡alÄ±ÅŸma saati" value="09:00 - 18:00" />
+              <InfoRow label="Çalışma saati" value="09:00 - 18:00" />
               <Text style={styles.label}>Konu</Text>
               <TextInput
                 value={supportSubject}
                 onChangeText={setSupportSubject}
                 style={styles.input}
-                placeholder="Ã–rn: GiriÅŸ sorunu"
+                placeholder="Örn: Giriş sorunu"
               />
               <Text style={styles.label}>Mesaj</Text>
               <TextInput
@@ -2399,10 +2399,10 @@ return (
                 onChangeText={setSupportMessage}
                 style={[styles.input, { minHeight: 100, textAlignVertical: "top" }]}
                 multiline
-                placeholder="YaÅŸadÄ±ÄŸÄ±nÄ±z sorunu yazÄ±n"
+                placeholder="Yaşadığınız sorunu yazın"
               />
               <Pressable style={styles.secondaryButton} onPress={() => void openSupportContact()}>
-                <Text style={styles.secondaryButtonText}>Destek Talebi OluÅŸtur</Text>
+                <Text style={styles.secondaryButtonText}>Destek Talebi Oluştur</Text>
               </Pressable>
             </SummaryCard>
           </View>
@@ -2410,51 +2410,51 @@ return (
 
         {activeTab === "SETTINGS" && authUser.role === "ADMIN" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Ã–zel Ayarlar</Text>
+            <Text style={styles.sectionTitle}>Özel Ayarlar</Text>
 
-            <Text style={styles.label}>Bordro baz aylÄ±k Ã¼cret</Text>
+            <Text style={styles.label}>Bordro baz aylık ücret</Text>
             <NumericInput
               value={appData.settings.monthlySalary}
               onCommit={(value) => setNumericSetting("monthlySalary", value)}
             />
 
-            <Text style={styles.label}>AylÄ±k baz saat</Text>
+            <Text style={styles.label}>Aylık baz saat</Text>
             <NumericInput
               value={appData.settings.monthlyBaseHours}
               onCommit={(value) => setNumericSetting("monthlyBaseHours", value)}
             />
 
-            <Text style={styles.label}>HaftalÄ±k fazla mesai eÅŸiÄŸi</Text>
+            <Text style={styles.label}>Haftalık fazla mesai eşiği</Text>
             <NumericInput
               value={appData.settings.weeklyOvertimeThresholdHours}
               onCommit={(value) => setNumericSetting("weeklyOvertimeThresholdHours", value)}
             />
 
-            <Text style={styles.label}>GÃ¼nlÃ¼k fazla mesai eÅŸiÄŸi</Text>
+            <Text style={styles.label}>Günlük fazla mesai eşiği</Text>
             <NumericInput
               value={appData.settings.dailyOvertimeThresholdHours}
               onCommit={(value) => setNumericSetting("dailyOvertimeThresholdHours", value)}
             />
 
-            <Text style={styles.label}>Mesai katsayÄ±sÄ±</Text>
+            <Text style={styles.label}>Mesai katsayısı</Text>
             <NumericInput
               value={appData.settings.coefficients.overtime}
               onCommit={(value) => setCoefficient("overtime", value)}
             />
 
-            <Text style={styles.label}>Pazar katsayÄ±sÄ±</Text>
+            <Text style={styles.label}>Pazar katsayısı</Text>
             <NumericInput
               value={appData.settings.coefficients.sunday}
               onCommit={(value) => setCoefficient("sunday", value)}
             />
 
-            <Text style={styles.label}>UBGT katsayÄ±sÄ±</Text>
+            <Text style={styles.label}>UBGT katsayısı</Text>
             <NumericInput
               value={appData.settings.coefficients.holiday}
               onCommit={(value) => setCoefficient("holiday", value)}
             />
 
-            <Text style={styles.label}>VarsayÄ±lan vardiya baÅŸlangÄ±cÄ±</Text>
+            <Text style={styles.label}>Varsayılan vardiya başlangıcı</Text>
             <TextInput
               value={appData.settings.defaultShiftStart}
               onChangeText={(value) => setStringSetting("defaultShiftStart", value)}
@@ -2462,7 +2462,7 @@ return (
               placeholder="20:00"
             />
 
-            <Text style={styles.label}>VarsayÄ±lan vardiya bitiÅŸi</Text>
+            <Text style={styles.label}>Varsayılan vardiya bitişi</Text>
             <TextInput
               value={appData.settings.defaultShiftEnd}
               onChangeText={(value) => setStringSetting("defaultShiftEnd", value)}
@@ -2470,31 +2470,31 @@ return (
               placeholder="08:00"
             />
 
-            <Text style={styles.label}>VarsayÄ±lan toplam saat</Text>
+            <Text style={styles.label}>Varsayılan toplam saat</Text>
             <NumericInput
               value={appData.settings.defaultShiftHours}
               onCommit={(value) => setNumericSetting("defaultShiftHours", value)}
             />
 
-            <Text style={styles.label}>VarsayÄ±lan mesai saat</Text>
+            <Text style={styles.label}>Varsayılan mesai saat</Text>
             <NumericInput
               value={appData.settings.defaultOvertimeHours}
               onCommit={(value) => setNumericSetting("defaultOvertimeHours", value)}
             />
 
-            <Text style={styles.label}>AylÄ±k yemek parasÄ±</Text>
+            <Text style={styles.label}>Aylık yemek parası</Text>
             <NumericInput
               value={appData.settings.monthlyMealAllowance}
               onCommit={(value) => setNumericSetting("monthlyMealAllowance", value)}
             />
 
-            <Text style={styles.label}>AylÄ±k yol parasÄ±</Text>
+            <Text style={styles.label}>Aylık yol parası</Text>
             <NumericInput
               value={appData.settings.monthlyTransportAllowance}
               onCommit={(value) => setNumericSetting("monthlyTransportAllowance", value)}
             />
 
-            <Text style={styles.label}>Yemek/yol hak ediÅŸ yÃ¶ntemi</Text>
+            <Text style={styles.label}>Yemek/yol hak ediş yöntemi</Text>
             <View style={styles.optionWrap}>
               {MEAL_TRANSPORT_METHOD_OPTIONS.map((item) => (
                 <Pressable
@@ -2525,14 +2525,14 @@ return (
               ))}
             </View>
 
-            <Text style={styles.label}>MaaÅŸ Ã¶deme gÃ¼nÃ¼</Text>
+            <Text style={styles.label}>Maaş ödeme günü</Text>
             <NumericInput
               value={appData.settings.salaryPaymentDay}
               onCommit={(value) => setNumericSetting("salaryPaymentDay", value)}
               placeholder="5"
             />
 
-            <Text style={styles.label}>AylÄ±k hedef kazanÃ§</Text>
+            <Text style={styles.label}>Aylık hedef kazanç</Text>
             <NumericInput
               value={appData.settings.monthlyTarget}
               onCommit={(value) => setNumericSetting("monthlyTarget", value)}
@@ -2564,21 +2564,21 @@ return (
             <View style={styles.row}>
               {!isMonthClosed ? (
                 <Pressable style={styles.secondaryButton} onPress={closeMonth}>
-                  <Text style={styles.secondaryButtonText}>AyÄ± Kapat</Text>
+                  <Text style={styles.secondaryButtonText}>Ayı Kapat</Text>
                 </Pressable>
               ) : (
                 <Pressable style={styles.secondaryButton} onPress={openMonth}>
-                  <Text style={styles.secondaryButtonText}>AyÄ± AÃ§</Text>
+                  <Text style={styles.secondaryButtonText}>Ayı Aç</Text>
                 </Pressable>
               )}
 
               <Pressable style={styles.deleteButton} onPress={resetSystem}>
-                <Text style={styles.deleteButtonText}>TÃ¼m Sistemi SÄ±fÄ±rla</Text>
+                <Text style={styles.deleteButtonText}>Tüm Sistemi Sıfırla</Text>
               </Pressable>
             </View>
             {authUser.role === "ADMIN" ? (
               <Pressable style={styles.deleteButton} onPress={resetEverything}>
-                <Text style={styles.deleteButtonText}>KullanÄ±cÄ±lar Dahil Tam SÄ±fÄ±rla</Text>
+                <Text style={styles.deleteButtonText}>Kullanıcılar Dahil Tam Sıfırla</Text>
               </Pressable>
             ) : null}
           </View>
@@ -2588,7 +2588,7 @@ return (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Senkronizasyon</Text>
             <Text style={styles.helper}>
-              Uygulama verileri gÃ¼venli ÅŸekilde eÅŸitlenir. Teknik ayrÄ±ntÄ±lar kullanÄ±cÄ±ya gÃ¶sterilmez.
+              Uygulama verileri güvenli şekilde eşitlenir. Teknik ayrıntılar kullanıcıya gösterilmez.
             </Text>
 
             <InfoRow label="Bağlantı durumu" value={backendConnected ? "Bağlı" : "Kısmi / Çevrimdışı"} />
@@ -2613,16 +2613,16 @@ return (
                 );
               }}
             >
-              <Text style={styles.secondaryButtonText}>BaÄŸlantÄ±yÄ± Test Et</Text>
+              <Text style={styles.secondaryButtonText}>Bağlantıyı Test Et</Text>
             </Pressable>
           </View>
         ) : null}
 
         {activeTab === "USERS" && authUser.role === "ADMIN" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>YÃ¶netim Paneli</Text>
+            <Text style={styles.sectionTitle}>Yönetim Paneli</Text>
             <Text style={styles.helper}>
-              YÃ¶netici iÅŸlemleri gÃ¼venli servis Ã¼zerinden yapÄ±lÄ±r ve denetim kayÄ±tlarÄ±na iÅŸlenir.
+              Yönetici işlemleri güvenli servis üzerinden yapılır ve denetim kayıtlarına işlenir.
             </Text>
             {adminError ? <Text style={styles.error}>{adminError}</Text> : null}
 
@@ -2641,9 +2641,9 @@ return (
             </View>
 
             <SummaryCard title="Dashboard">
-              <InfoRow label="Toplam kullanÄ±cÄ±" value={`${adminStats?.totalUsers ?? 0}`} />
-              <InfoRow label="Aktif kullanÄ±cÄ±" value={`${adminStats?.activeUsers ?? 0}`} />
-              <InfoRow label="BanlÄ± kullanÄ±cÄ±" value={`${adminStats?.bannedUsers ?? 0}`} />
+              <InfoRow label="Toplam kullanıcı" value={`${adminStats?.totalUsers ?? 0}`} />
+              <InfoRow label="Aktif kullanıcı" value={`${adminStats?.activeUsers ?? 0}`} />
+              <InfoRow label="Banlı kullanıcı" value={`${adminStats?.bannedUsers ?? 0}`} />
               {(adminStats?.recentLogins ?? []).map((item) => (
                 <InfoRow
                   key={item.id}
@@ -2653,20 +2653,20 @@ return (
               ))}
             </SummaryCard>
 
-            <SummaryCard title="KullanÄ±cÄ± Listesi">
+            <SummaryCard title="Kullanıcı Listesi">
               <TextInput
                 value={adminSearch}
                 onChangeText={setAdminSearch}
                 style={styles.input}
                 autoCapitalize="none"
-                placeholder="KullanÄ±cÄ± adÄ± ara"
+                placeholder="Kullanıcı adı ara"
               />
               <Pressable
                 style={styles.secondaryButton}
                 onPress={refreshAdminUsers}
                 disabled={adminBusy}
               >
-                <Text style={styles.secondaryButtonText}>KullanÄ±cÄ± Ara / Yenile</Text>
+                <Text style={styles.secondaryButtonText}>Kullanıcı Ara / Yenile</Text>
               </Pressable>
               {adminUsers.map((item) => (
                 <Pressable
@@ -2674,13 +2674,13 @@ return (
                   style={styles.summaryCard}
                   onPress={() => openAdminUserDetail(item.id)}
                 >
-                  <InfoRow label={item.username} value={item.role === "ADMIN" ? "YÃ¶netici" : "KullanÄ±cÄ±"} />
+                  <InfoRow label={item.username} value={item.role === "ADMIN" ? "Yönetici" : "Kullanıcı"} />
                   <InfoRow
                     label="Durum"
-                    value={`${item.isActive ? "Aktif" : "Pasif"} / ${item.isBanned ? "BanlÄ±" : "Ban yok"}`}
+                    value={`${item.isActive ? "Aktif" : "Pasif"} / ${item.isBanned ? "Banlı" : "Ban yok"}`}
                   />
                   <InfoRow
-                    label="Son giriÅŸ"
+                    label="Son giriş"
                     value={item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString("tr-TR") : "-"}
                   />
                   <InfoRow label="Son IP" value={item.lastIp ?? "-"} />
@@ -2707,18 +2707,18 @@ return (
                   label="Aktif oturum"
                   value={`${adminSelectedUser.sessions.filter((item) => !item.revokedAt).length}`}
                 />
-                <InfoRow label="KayÄ±t tarihi" value={new Date(adminSelectedUser.user.createdAt).toLocaleString("tr-TR")} />
+                <InfoRow label="Kayıt tarihi" value={new Date(adminSelectedUser.user.createdAt).toLocaleString("tr-TR")} />
                 <InfoRow
-                  label="Son giriÅŸ"
+                  label="Son giriş"
                   value={adminSelectedUser.user.lastLoginAt ? new Date(adminSelectedUser.user.lastLoginAt).toLocaleString("tr-TR") : "-"}
                 />
-                <Text style={styles.label}>Oturum geÃ§miÅŸi</Text>
+                <Text style={styles.label}>Oturum geçmişi</Text>
                 {adminSelectedUser.sessions.slice(0, 5).map((session) => (
                   <View key={session.id} style={styles.adminSessionRow}>
                     <InfoRow label="IP" value={session.ipAddress ?? "-"} />
                     <InfoRow label="Cihaz" value={session.deviceInfo ?? "-"} />
-                    <InfoRow label="BaÅŸlangÄ±Ã§" value={new Date(session.createdAt).toLocaleString("tr-TR")} />
-                    <InfoRow label="Durum" value={session.revokedAt ? "SonlandÄ±" : "Aktif"} />
+                    <InfoRow label="Başlangıç" value={new Date(session.createdAt).toLocaleString("tr-TR")} />
+                    <InfoRow label="Durum" value={session.revokedAt ? "Sonlandı" : "Aktif"} />
                   </View>
                 ))}
                 <Text style={styles.label}>Giriş denemeleri</Text>
@@ -2779,7 +2779,7 @@ return (
                       runAdminAction(() =>
                         adminBanUser(
                           adminSelectedUser.user.id,
-                          adminBanReason || "Admin tarafÄ±ndan banlandÄ±.",
+                          adminBanReason || "Admin tarafından banlandı.",
                           adminBanDurationHours.trim() ? safePositive(tryParseNumber(adminBanDurationHours)) : undefined
                         )
                       )
@@ -2793,7 +2793,7 @@ return (
                     onPress={() => runAdminAction(() => adminUnbanUser(adminSelectedUser.user.id))}
                     disabled={adminBusy}
                   >
-                    <Text style={styles.optionButtonText}>Ban KaldÄ±r</Text>
+                    <Text style={styles.optionButtonText}>Ban Kaldır</Text>
                   </Pressable>
                   <Pressable
                     style={styles.optionButton}
@@ -2814,7 +2814,7 @@ return (
                     onPress={() => runAdminAction(() => adminRevokeUserSessions(adminSelectedUser.user.id))}
                     disabled={adminBusy}
                   >
-                    <Text style={styles.optionButtonText}>OturumlarÄ± SonlandÄ±r</Text>
+                    <Text style={styles.optionButtonText}>Oturumları Sonlandır</Text>
                   </Pressable>
                   <Pressable
                     style={styles.optionButton}
@@ -2827,13 +2827,13 @@ return (
               </SummaryCard>
             ) : null}
 
-            <SummaryCard title="IP Ban YÃ¶netimi">
+            <SummaryCard title="IP Ban Yönetimi">
               <Text style={styles.label}>IP adresi</Text>
               <TextInput
                 value={adminIpInput}
                 onChangeText={setAdminIpInput}
                 style={styles.input}
-                placeholder="Ã–rn: 85.111.22.33"
+                placeholder="Örn: 85.111.22.33"
                 autoCapitalize="none"
               />
               <Text style={styles.label}>Sebep</Text>
@@ -2841,14 +2841,14 @@ return (
                 value={adminIpReason}
                 onChangeText={setAdminIpReason}
                 style={styles.input}
-                placeholder="GÃ¼venlik ihlali"
+                placeholder="Güvenlik ihlali"
               />
               <Pressable
                 style={styles.secondaryButton}
                 onPress={() =>
                   void runAdminAction(async () => {
                     if (!adminIpInput.trim()) {
-                      Alert.alert("Eksik bilgi", "IP adresi boÅŸ olamaz.");
+                      Alert.alert("Eksik bilgi", "IP adresi boş olamaz.");
                       return;
                     }
                     await adminAddIpBan(adminIpInput.trim(), adminIpReason);
@@ -2860,7 +2860,7 @@ return (
                 <Text style={styles.secondaryButtonText}>IP Ban Ekle</Text>
               </Pressable>
               {adminIpBans.length === 0 ? (
-                <Text style={styles.helper}>Aktif IP ban kaydÄ± bulunmuyor.</Text>
+                <Text style={styles.helper}>Aktif IP ban kaydı bulunmuyor.</Text>
               ) : (
                 adminIpBans.map((item) => (
                   <View key={item.id} style={styles.summaryCard}>
@@ -2872,7 +2872,7 @@ return (
                       onPress={() => void runAdminAction(() => adminRemoveIpBan(item.id))}
                       disabled={adminBusy}
                     >
-                      <Text style={styles.deleteButtonText}>Ban KaldÄ±r</Text>
+                      <Text style={styles.deleteButtonText}>Ban Kaldır</Text>
                     </Pressable>
                   </View>
                 ))
@@ -2896,11 +2896,11 @@ return (
             ))}
 
             <Text style={styles.legalWarning}>
-              Bu uygulamadaki bilgiler yalnÄ±zca bilgilendirme amaÃ§lÄ±dÄ±r. ResmÃ® hukuki danÄ±ÅŸmanlÄ±k yerine geÃ§mez.
+              Bu uygulamadaki bilgiler yalnızca bilgilendirme amaçlıdır. Resmî hukuki danışmanlık yerine geçmez.
             </Text>
 
-            <SummaryCard title="Ä°stifa / Fesih DilekÃ§esi Åablonu">
-              <Text style={styles.label}>Åablon seÃ§imi</Text>
+            <SummaryCard title="İstifa / Fesih Dilekçesi Şablonu">
+              <Text style={styles.label}>Şablon seçimi</Text>
               <View style={styles.optionWrap}>
                 {LETTER_TEMPLATE_OPTIONS.map((item) => (
                   <Pressable
@@ -2926,24 +2926,24 @@ return (
               <TextInput value={appData.legal.resignationForm.address} onChangeText={(v) => setResignationField("address", v)} style={styles.input} />
               <Text style={styles.label}>Telefon</Text>
               <TextInput value={appData.legal.resignationForm.phone} onChangeText={(v) => setResignationField("phone", v)} style={styles.input} keyboardType="phone-pad" />
-              <Text style={styles.label}>Ä°ÅŸ yeri / Ã¼nvan</Text>
+              <Text style={styles.label}>İş yeri / ünvan</Text>
               <TextInput value={appData.legal.resignationForm.workplaceTitle} onChangeText={(v) => setResignationField("workplaceTitle", v)} style={styles.input} />
               <Text style={styles.label}>Departman</Text>
               <TextInput value={appData.legal.resignationForm.department} onChangeText={(v) => setResignationField("department", v)} style={styles.input} />
-              <Text style={styles.label}>Ä°ÅŸe giriÅŸ tarihi (01.01.2025)</Text>
+              <Text style={styles.label}>İşe giriş tarihi (01.01.2025)</Text>
               <TextInput value={appData.legal.resignationForm.hireDate} onChangeText={(v) => setResignationField("hireDate", v)} style={styles.input} keyboardType="number-pad" />
-              <Text style={styles.label}>AyrÄ±lÄ±ÅŸ / fesih tarihi (01.01.2026)</Text>
+              <Text style={styles.label}>Ayrılış / fesih tarihi (01.01.2026)</Text>
               <TextInput value={appData.legal.resignationForm.leaveDate} onChangeText={(v) => setResignationField("leaveDate", v)} style={styles.input} keyboardType="number-pad" />
-              <Text style={styles.label}>DilekÃ§e tarihi (01.01.2026)</Text>
+              <Text style={styles.label}>Dilekçe tarihi (01.01.2026)</Text>
               <TextInput value={appData.legal.resignationForm.letterDate} onChangeText={(v) => setResignationField("letterDate", v)} style={styles.input} keyboardType="number-pad" />
-              <Text style={styles.label}>AÃ§Ä±klama</Text>
+              <Text style={styles.label}>Açıklama</Text>
               <TextInput
                 value={appData.legal.resignationForm.explanation}
                 onChangeText={(v) => setResignationField("explanation", v)}
                 style={[styles.input, { minHeight: 72, textAlignVertical: "top" }]}
                 multiline
               />
-              <Text style={styles.label}>DilekÃ§e metni (dÃ¼zenlenebilir)</Text>
+              <Text style={styles.label}>Dilekçe metni (düzenlenebilir)</Text>
               <TextInput
                 value={appData.legal.resignationForm.customDraft || generatedDraft}
                 onChangeText={(v) => setResignationField("customDraft", v)}
@@ -2951,30 +2951,30 @@ return (
                 multiline
               />
               <Pressable style={styles.secondaryButton} onPress={downloadResignationPdf}>
-                <Text style={styles.secondaryButtonText}>Ä°stifa/Fesih DilekÃ§esi PDF Ä°ndir</Text>
+                <Text style={styles.secondaryButtonText}>İstifa/Fesih Dilekçesi PDF İndir</Text>
               </Pressable>
             </SummaryCard>
 
-            <SummaryCard title="KÄ±dem / Ä°hbar Hesaplama">
-              <Text style={styles.label}>Ä°ÅŸe giriÅŸ tarihi (01.01.2025)</Text>
+            <SummaryCard title="Kıdem / İhbar Hesaplama">
+              <Text style={styles.label}>İşe giriş tarihi (01.01.2025)</Text>
               <TextInput value={appData.legal.hireDate} onChangeText={(value) => setLegalField("hireDate", value)} keyboardType="number-pad" style={styles.input} />
-              <Text style={styles.label}>Ä°ÅŸten Ã§Ä±kÄ±ÅŸ tarihi (01.01.2026)</Text>
+              <Text style={styles.label}>İşten çıkış tarihi (01.01.2026)</Text>
               <TextInput value={appData.legal.terminationDate} onChangeText={(value) => setLegalField("terminationDate", value)} keyboardType="number-pad" style={styles.input} />
               {legalDateFormatWarning ? <Text style={styles.error}>{legalDateFormatWarning}</Text> : null}
 
-              <Text style={styles.label}>BrÃ¼t maaÅŸ</Text>
+              <Text style={styles.label}>Brüt maaş</Text>
               <TextInput value={String(appData.legal.grossSalary)} onChangeText={(value) => setLegalField("grossSalary", value)} keyboardType="numeric" style={styles.input} />
-              <Text style={styles.label}>AylÄ±k yemek parasÄ±</Text>
+              <Text style={styles.label}>Aylık yemek parası</Text>
               <TextInput value={String(appData.legal.mealAllowance)} onChangeText={(value) => setLegalField("mealAllowance", value)} keyboardType="numeric" style={styles.input} />
-              <Text style={styles.label}>AylÄ±k yol parasÄ±</Text>
+              <Text style={styles.label}>Aylık yol parası</Text>
               <TextInput value={String(appData.legal.transportAllowance)} onChangeText={(value) => setLegalField("transportAllowance", value)} keyboardType="numeric" style={styles.input} />
-              <Text style={styles.label}>DiÄŸer dÃ¼zenli yan haklar</Text>
+              <Text style={styles.label}>Diğer düzenli yan haklar</Text>
               <TextInput value={String(appData.legal.otherAllowance)} onChangeText={(value) => setLegalField("otherAllowance", value)} keyboardType="numeric" style={styles.input} />
-              <Text style={styles.label}>KullanÄ±lmayan izin gÃ¼nÃ¼</Text>
+              <Text style={styles.label}>Kullanılmayan izin günü</Text>
               <TextInput value={String(appData.legal.unusedAnnualLeaveDays)} onChangeText={(value) => setLegalField("unusedAnnualLeaveDays", value)} keyboardType="numeric" style={styles.input} />
-              <Text style={styles.label}>Damga vergisi oranÄ± (%)</Text>
+              <Text style={styles.label}>Damga vergisi oranı (%)</Text>
               <TextInput value={String(appData.legal.stampTaxRate)} onChangeText={(value) => setLegalField("stampTaxRate", value)} keyboardType="numeric" style={styles.input} />
-              <Text style={styles.label}>KÄ±dem tavanÄ±</Text>
+              <Text style={styles.label}>Kıdem tavanı</Text>
               <TextInput value={String(appData.legal.severanceCap)} onChangeText={(value) => setLegalField("severanceCap", value)} keyboardType="numeric" style={styles.input} />
               <Text style={styles.label}>Fesih nedeni</Text>
               <TextInput value={appData.legal.terminationReason} onChangeText={(value) => setAppData((prev) => ({ ...prev, legal: { ...prev.legal, terminationReason: value } }))} style={styles.input} />
@@ -2995,15 +2995,15 @@ return (
               </View>
             </SummaryCard>
 
-            <SummaryCard title="Hesap SonuÃ§larÄ±">
-              <InfoRow label="Toplam Ã§alÄ±ÅŸma sÃ¼resi" value={legalResult.serviceText} />
-              <InfoRow label="KÄ±dem tazminatÄ± tahmini" value={formatCurrency(legalResult.severancePayNet)} />
-              <InfoRow label="Ä°hbar sÃ¼resi" value={`${legalResult.noticeWeeks} hafta`} />
-              <InfoRow label="Ä°hbar tazminatÄ± tahmini" value={formatCurrency(legalResult.noticePay)} />
-              <InfoRow label="KullanÄ±lmayan izin tahmini" value={formatCurrency(legalResult.annualLeavePay)} />
+            <SummaryCard title="Hesap Sonuçları">
+              <InfoRow label="Toplam çalışma süresi" value={legalResult.serviceText} />
+              <InfoRow label="Kıdem tazminatı tahmini" value={formatCurrency(legalResult.severancePayNet)} />
+              <InfoRow label="İhbar süresi" value={`${legalResult.noticeWeeks} hafta`} />
+              <InfoRow label="İhbar tazminatı tahmini" value={formatCurrency(legalResult.noticePay)} />
+              <InfoRow label="Kullanılmayan izin tahmini" value={formatCurrency(legalResult.annualLeavePay)} />
               <InfoRow label="Toplam tahmini alacak" value={formatCurrency(legalResult.estimatedTotal)} strong />
               <Pressable style={styles.secondaryButton} onPress={downloadLegalCalculationPdf}>
-                <Text style={styles.secondaryButtonText}>KÄ±dem/Ä°hbar PDF Ä°ndir</Text>
+                <Text style={styles.secondaryButtonText}>Kıdem/İhbar PDF İndir</Text>
               </Pressable>
             </SummaryCard>
 
@@ -3022,13 +3022,13 @@ return (
               <Text style={styles.drawerItemText}>Takvim</Text>
             </Pressable>
             <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SUMMARY")}>
-              <Text style={styles.drawerItemText}>Ã–zet</Text>
+              <Text style={styles.drawerItemText}>Özet</Text>
             </Pressable>
 
             {authUser.role === "ADMIN" ? (
               <>
                 <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SETTINGS")}>
-                  <Text style={styles.drawerItemText}>Ã–zel Ayarlar</Text>
+                  <Text style={styles.drawerItemText}>Özel Ayarlar</Text>
                 </Pressable>
                 <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SYNC")}>
                   <Text style={styles.drawerItemText}>Senkronizasyon</Text>
@@ -3042,7 +3042,7 @@ return (
 
             {authUser.role === "ADMIN" ? (
               <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("USERS")}>
-                <Text style={styles.drawerItemText}>KullanÄ±cÄ±lar</Text>
+                <Text style={styles.drawerItemText}>Kullanıcılar</Text>
               </Pressable>
             ) : null}
 
@@ -3060,7 +3060,7 @@ return (
                 void handleLogout();
               }}
             >
-              <Text style={styles.drawerExitText}>Ã‡Ä±kÄ±ÅŸ</Text>
+              <Text style={styles.drawerExitText}>Çıkış</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -3074,52 +3074,52 @@ return (
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
-              {selectedDateKey ? `${formatDateKeyTr(selectedDateKey)} iÃ§in durum seÃ§` : "Durum seÃ§"}
+              {selectedDateKey ? `${formatDateKeyTr(selectedDateKey)} için durum seç` : "Durum seç"}
             </Text>
-            <Text style={styles.helper}>GÃ¼n tÃ¼rÃ¼: {dayTypeLabel(selectedDayType)}</Text>
+            <Text style={styles.helper}>Gün türü: {dayTypeLabel(selectedDayType)}</Text>
             <Text style={styles.helper}>Mevcut durum: {dayStatusLabel(selectedDayRecord?.status ?? null)}</Text>
 
             {selectedDayRecord?.status === "WORKED" ? (
               <View style={styles.workInfoBox}>
-                <Text style={styles.label}>BaÅŸlangÄ±Ã§ saati</Text>
+                <Text style={styles.label}>Başlangıç saati</Text>
                 <TextInput value={dayEditStart} onChangeText={setDayEditStart} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="20:00" />
-                <Text style={styles.label}>BitiÅŸ saati</Text>
+                <Text style={styles.label}>Bitiş saati</Text>
                 <TextInput value={dayEditEnd} onChangeText={setDayEditEnd} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="08:00" />
                 <Text style={styles.label}>Toplam saat</Text>
                 <TextInput value={dayEditTotalHours} onChangeText={setDayEditTotalHours} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="12" />
                 <Text style={styles.label}>Mola dakika</Text>
                 <TextInput value={dayEditBreakMinutes} onChangeText={setDayEditBreakMinutes} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="0" />
-                <Text style={styles.workInfoText}>Otomatik gÃ¼nlÃ¼k mesai: {selectedAutoDailyOvertime} saat</Text>
-                <Text style={styles.label}>Manuel mesai dÃ¼zeltme</Text>
-                <TextInput value={dayEditManualOvertime} onChangeText={setDayEditManualOvertime} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="BoÅŸsa otomatik hesaplanÄ±r" />
+                <Text style={styles.workInfoText}>Otomatik günlük mesai: {selectedAutoDailyOvertime} saat</Text>
+                <Text style={styles.label}>Manuel mesai düzeltme</Text>
+                <TextInput value={dayEditManualOvertime} onChangeText={setDayEditManualOvertime} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="Boşsa otomatik hesaplanır" />
                 <Text style={styles.label}>Not</Text>
                 <TextInput value={dayEditNote} onChangeText={setDayEditNote} style={[styles.input, { minHeight: 70, textAlignVertical: "top" }]} editable={!isMonthClosed} multiline />
                 <Text style={styles.helper}>
                   Yemek/Yol: {selectedDateKey && isMealTransportEligible(selectedDateKey, selectedDayType, "WORKED", appData.halfHolidayDates) ? "Hak eder" : "Hak etmez"}
                 </Text>
                 <Pressable style={styles.primaryButton} onPress={saveSelectedDayDetail} disabled={isMonthClosed}>
-                  <Text style={styles.primaryButtonText}>GÃ¼n DetayÄ±nÄ± Kaydet</Text>
+                  <Text style={styles.primaryButtonText}>Gün Detayını Kaydet</Text>
                 </Pressable>
               </View>
             ) : null}
 
-            {isMonthClosed ? <Text style={styles.error}>Bu ay kapalÄ±, deÄŸiÅŸiklik yapÄ±lamaz.</Text> : null}
+            {isMonthClosed ? <Text style={styles.error}>Bu ay kapalı, değişiklik yapılamaz.</Text> : null}
 
             <View style={styles.modalButtonGrid}>
               <ModalButton
-                title="Ã‡alÄ±ÅŸtÄ±m"
+                title="Çalıştım"
                 onPress={() => updateDayStatus("WORKED")}
                 disabled={isMonthClosed}
                 tone="primary"
               />
               <ModalButton
-                title="Ä°zinli"
+                title="İzinli"
                 onPress={() => updateDayStatus("LEAVE")}
                 disabled={isMonthClosed}
                 tone="secondary"
               />
               <ModalButton
-                title="YÄ±llÄ±k Ä°zin"
+                title="Yıllık İzin"
                 onPress={() => updateDayStatus("ANNUAL_LEAVE")}
                 disabled={isMonthClosed}
                 tone="secondary"
@@ -3182,7 +3182,7 @@ function ConsentCheck(props: { checked: boolean; onToggle: () => void; text: str
   return (
     <Pressable style={styles.consentRow} onPress={props.onToggle}>
       <View style={[styles.consentBox, props.checked ? styles.consentBoxChecked : null]}>
-        {props.checked ? <Text style={styles.consentTick}>âœ“</Text> : null}
+        {props.checked ? <Text style={styles.consentTick}>✓</Text> : null}
       </View>
       <Text style={styles.consentText}>{props.text}</Text>
     </Pressable>
@@ -3214,7 +3214,7 @@ function NumericInput(props: {
       return;
     }
     if (!/^\d+(\.\d+)?$/.test(normalized)) {
-      setError("GeÃ§erli sayÄ± girin.");
+      setError("Geçerli sayı girin.");
       return;
     }
     props.onCommit(normalized);
