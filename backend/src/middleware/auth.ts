@@ -9,6 +9,7 @@ type AuthRow = {
   role: "ADMIN" | "USER";
   is_banned: boolean;
   is_active: boolean;
+  banned_until: string | null;
   session_id: string;
 };
 
@@ -41,6 +42,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
           u.role,
           u.is_banned,
           u.is_active,
+          u.banned_until,
           s.id AS session_id
         FROM sessions s
         INNER JOIN users u ON u.id = s.user_id
@@ -64,7 +66,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    if (row.is_banned) {
+    const banActive = row.is_banned && (!row.banned_until || new Date(row.banned_until).getTime() > Date.now());
+    if (banActive) {
       res.status(403).json({ error: "Hesap kullanıma kapatıldı." });
       return;
     }

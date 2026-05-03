@@ -44,6 +44,7 @@ type UserRow = {
   is_banned: boolean;
   is_active: boolean;
   ban_reason: string | null;
+  banned_until: string | null;
 };
 
 const accessLifetimeMs = parseDurationToMs(config.JWT_EXPIRES_IN, 15 * 60 * 1000);
@@ -67,6 +68,16 @@ function hasRequiredConsents(consents: z.infer<typeof consentSchema>): boolean {
     consents.kullanimSartlari &&
     consents.yasalSorumluluk
   );
+}
+
+function isBanActive(user: Pick<UserRow, "is_banned" | "banned_until">): boolean {
+  if (!user.is_banned) {
+    return false;
+  }
+  if (!user.banned_until) {
+    return true;
+  }
+  return new Date(user.banned_until).getTime() > Date.now();
 }
 
 async function createSessionTokens(input: {
@@ -134,6 +145,36 @@ async function isIpBanned(ipAddress: string): Promise<boolean> {
   return banned.length > 0;
 }
 
+async function recordLoginAttempt(input: {
+  username: string;
+  userId: string | null;
+  ipAddress: string;
+  deviceInfo: string;
+  success: boolean;
+  failReason?: string;
+}): Promise<void> {
+  await query(
+    `
+      INSERT INTO login_attempts (username, user_id, ip_address, device_info, success, fail_reason)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+    [input.username, input.userId, input.ipAddress, input.deviceInfo, input.success, input.failReason ?? null]
+  );
+}
+
+async function upsertUserDevice(userId: string, ipAddress: string, deviceInfo: string): Promise<void> {
+  const fingerprint = hashToken(`${userId}|${deviceInfo}`);
+  await query(
+    `
+      INSERT INTO user_devices (user_id, device_fingerprint, device_info, last_ip)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id, device_fingerprint)
+      DO UPDATE SET device_info = EXCLUDED.device_info, last_ip = EXCLUDED.last_ip, last_seen_at = NOW()
+    `,
+    [userId, fingerprint, deviceInfo, ipAddress]
+  );
+}
+
 export const authRouter = Router();
 
 authRouter.post("/register", async (req, res) => {
@@ -188,9 +229,21 @@ authRouter.post("/register", async (req, res) => {
   });
 
   await query(
-    `UPDATE users SET last_login_at = NOW(), last_ip = $2, device_info = $3 WHERE id = $1`,
+    `
+      UPDATE users
+      SET register_ip = COALESCE(register_ip, $2),
+          last_login_at = NOW(),
+          last_seen_at = NOW(),
+          login_count = login_count + 1,
+          last_ip = $2,
+          device_info = $3,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
     [user.id, ipAddress, deviceInfo]
   );
+  await recordLoginAttempt({ username, userId: user.id, ipAddress, deviceInfo, success: true });
+  await upsertUserDevice(user.id, ipAddress, deviceInfo);
 
   await createAuditLog({
     adminUserId: null,
@@ -220,6 +273,14 @@ authRouter.post("/login", async (req, res) => {
   const deviceInfo = req.clientDeviceInfo ?? "unknown";
 
   if (await isIpBanned(ipAddress)) {
+    await recordLoginAttempt({
+      username: normalizeUsername(parsed.data.username),
+      userId: null,
+      ipAddress,
+      deviceInfo,
+      success: false,
+      failReason: "IP_BANNED"
+    });
     res.status(403).json({ error: "Bu cihaz için erişim kısıtlandı." });
     return;
   }
@@ -227,7 +288,7 @@ authRouter.post("/login", async (req, res) => {
   const username = normalizeUsername(parsed.data.username);
   const users = await query<UserRow>(
     `
-      SELECT id, username, role, password_hash, is_banned, is_active, ban_reason
+      SELECT id, username, role, password_hash, is_banned, is_active, ban_reason, banned_until
       FROM users
       WHERE username = $1
       LIMIT 1
@@ -236,6 +297,7 @@ authRouter.post("/login", async (req, res) => {
   );
 
   if (users.length === 0) {
+    await recordLoginAttempt({ username, userId: null, ipAddress, deviceInfo, success: false, failReason: "USER_NOT_FOUND" });
     res.status(401).json({ error: "Kullanıcı adı veya şifre hatalı." });
     return;
   }
@@ -243,16 +305,33 @@ authRouter.post("/login", async (req, res) => {
   const user = users[0];
   const passOk = await bcrypt.compare(parsed.data.password, user.password_hash);
   if (!passOk) {
+    await query(
+      `UPDATE users SET failed_login_count = failed_login_count + 1, last_failed_login_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [user.id]
+    );
+    await recordLoginAttempt({ username, userId: user.id, ipAddress, deviceInfo, success: false, failReason: "BAD_PASSWORD" });
     res.status(401).json({ error: "Kullanıcı adı veya şifre hatalı." });
     return;
   }
 
   if (!user.is_active) {
+    await recordLoginAttempt({ username, userId: user.id, ipAddress, deviceInfo, success: false, failReason: "INACTIVE" });
     res.status(403).json({ error: "Hesap pasif durumda." });
     return;
   }
 
-  if (user.is_banned) {
+  if (user.is_banned && !isBanActive(user)) {
+    await query(
+      `UPDATE users SET is_banned = FALSE, ban_reason = NULL, banned_until = NULL, updated_at = NOW() WHERE id = $1`,
+      [user.id]
+    );
+    user.is_banned = false;
+    user.ban_reason = null;
+    user.banned_until = null;
+  }
+
+  if (isBanActive(user)) {
+    await recordLoginAttempt({ username, userId: user.id, ipAddress, deviceInfo, success: false, failReason: "BANNED" });
     res.status(403).json({ error: "Hesap kullanıma kapatıldı." });
     return;
   }
@@ -266,9 +345,20 @@ authRouter.post("/login", async (req, res) => {
   });
 
   await query(
-    `UPDATE users SET last_login_at = NOW(), last_ip = $2, device_info = $3 WHERE id = $1`,
+    `
+      UPDATE users
+      SET last_login_at = NOW(),
+          last_seen_at = NOW(),
+          login_count = login_count + 1,
+          last_ip = $2,
+          device_info = $3,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
     [user.id, ipAddress, deviceInfo]
   );
+  await recordLoginAttempt({ username, userId: user.id, ipAddress, deviceInfo, success: true });
+  await upsertUserDevice(user.id, ipAddress, deviceInfo);
 
   res.json({
     user: responseUser(user),
@@ -299,6 +389,7 @@ authRouter.post("/refresh", async (req, res) => {
       role: "ADMIN" | "USER";
       is_banned: boolean;
       is_active: boolean;
+      banned_until: string | null;
       session_id: string;
     }>(
       `
@@ -308,6 +399,7 @@ authRouter.post("/refresh", async (req, res) => {
           u.role,
           u.is_banned,
           u.is_active,
+          u.banned_until,
           s.id AS session_id
         FROM sessions s
         INNER JOIN users u ON u.id = s.user_id
@@ -325,7 +417,8 @@ authRouter.post("/refresh", async (req, res) => {
     }
 
     const row = rows[0];
-    if (!row.is_active || row.is_banned) {
+    const rowBanActive = row.is_banned && (!row.banned_until || new Date(row.banned_until).getTime() > Date.now());
+    if (!row.is_active || rowBanActive) {
       await query(`UPDATE sessions SET revoked_at = NOW() WHERE id = $1`, [row.session_id]);
       res.status(403).json({ error: "Hesap erişimi kapalı." });
       return;
@@ -387,9 +480,10 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     is_banned: boolean;
     is_active: boolean;
     ban_reason: string | null;
+    banned_until: string | null;
   }>(
     `
-      SELECT id, username, role, is_banned, is_active, ban_reason
+      SELECT id, username, role, is_banned, is_active, ban_reason, banned_until
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -410,7 +504,8 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       role: user.role,
       isBanned: user.is_banned,
       isActive: user.is_active,
-      banReason: user.ban_reason
+      banReason: user.ban_reason,
+      bannedUntil: user.banned_until
     }
   });
 });

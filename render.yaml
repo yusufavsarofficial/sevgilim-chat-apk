@@ -18,12 +18,14 @@ services:
       - key: REFRESH_TOKEN_EXPIRES_IN
         value: 30d
       - key: ADMIN_USERNAME
-        value: Yusuf
+        value: Ayf
       - key: ADMIN_PASSWORD_HASH
-        value: c3451b6107562d64e47292af94e8dd0ee16f8dc425b1c49d51196631e2292551
+        value: 3bbe665633d6edfd61e91598560db3fee78a21da78b3fe77e9fefac5ecfc4cc1
       - key: REGISTER_INVITE_KEY_HASH
-        value: 0ac5c8a0408bb091b81da0f486a2a70b45b6bbe5924bd5f62facbac802503039
+        value: 3825b97592ef25f0bb0fb784a3bfe0b016b1e27e134cff2379b69f85842cf52f
+      - key: PG_SSL_REJECT_UNAUTHORIZED
+        value: "true"
       - key: PORT
         value: 3000
       - key: CORS_ORIGIN
-        value: https://sevgilim-chat.onrender.com,http://localhost:8081,http://localhost:19006
+        value: https://puantaj-maas-backend.onrender.com,http://localhost:8081,http://localhost:19006

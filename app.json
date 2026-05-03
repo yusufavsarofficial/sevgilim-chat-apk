@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -17,7 +17,10 @@
     "android": {
       "package": "com.yusuf.puantajmaashesap",
       "versionCode": 3,
-      "permissions": [],
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ],
       "usesCleartextTraffic": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -26,7 +29,7 @@
     },
     "owner": "yusufav",
     "extra": {
-      "apiBaseUrl": "https://sevgilim-chat.onrender.com",
+      "apiBaseUrl": "https://puantaj-maas-backend.onrender.com",
       "eas": {
         "projectId": "f4d47031-ec50-440b-ae8b-5e00fca98945"
       }

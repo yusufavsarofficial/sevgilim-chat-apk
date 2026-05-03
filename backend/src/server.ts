@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureAdminUser } from "./bootstrap.js";
 import { config } from "./config.js";
-import { query } from "./db.js";
+import { ensureDatabaseSchema, query } from "./db.js";
 import { requireAdmin, requireAuth } from "./middleware/auth.js";
 import { errorHandler, notFoundHandler } from "./middleware/errors.js";
 import { requestMetaMiddleware } from "./middleware/requestMeta.js";
@@ -83,6 +83,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 async function start(): Promise<void> {
+  await ensureDatabaseSchema();
   await ensureAdminUser();
   app.listen(config.PORT, () => {
     process.stdout.write(`Backend hazır: http://localhost:${config.PORT}\n`);

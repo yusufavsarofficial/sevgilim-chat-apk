@@ -1,14 +1,17 @@
 ﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Device from "expo-device";
+import { Platform } from "react-native";
 import { AppData, AuthUser } from "./types";
 import { ConsentBundle } from "./auth";
 
-const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://sevgilim-chat.onrender.com").replace(/\/$/, "");
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || "https://puantaj-maas-backend.onrender.com").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "@puantaj-maas-apk:remote:access";
 const REFRESH_TOKEN_KEY = "@puantaj-maas-apk:remote:refresh";
 const DEFAULT_TIMEOUT_MS = 12000;
 const HEALTH_TIMEOUT_MS = 7000;
 
 const GENERIC_ERROR = "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
+const APP_VERSION = "1.0.0";
 
 type RemoteUser = {
   id: string;
@@ -35,6 +38,8 @@ type AdminUser = {
   isBanned: boolean;
   isActive: boolean;
   banReason: string | null;
+  bannedUntil: string | null;
+  failedLoginCount: number;
   createdAt: string;
   lastLoginAt: string | null;
   lastIp: string | null;
@@ -52,8 +57,43 @@ type AdminUserDetail = {
     revokedAt: string | null;
   }>;
   payroll: { data: unknown; updatedAt: string } | null;
+  loginAttempts?: Array<{
+    id: string;
+    username: string;
+    ipAddress: string | null;
+    deviceInfo: string | null;
+    success: boolean;
+    failReason: string | null;
+    createdAt: string;
+  }>;
+  devices?: Array<{
+    id: string;
+    fingerprint: string;
+    deviceInfo: string | null;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    lastIp: string | null;
+  }>;
+  adminNotes?: Array<{ id: string; adminUserId: string | null; note: string; createdAt: string }>;
 };
 
+type AdminIpBan = {
+  id: string;
+  ipAddress: string;
+  reason: string | null;
+  createdAt: string;
+};
+
+
+function deviceHeaders(): Record<string, string> {
+  return {
+    "X-App-Version": APP_VERSION,
+    "X-Device-Brand": Device.brand ?? "",
+    "X-Device-Model": Device.modelName ?? "",
+    "X-OS-Name": Device.osName ?? Platform.OS,
+    "X-OS-Version": Device.osVersion ?? ""
+  };
+}
 let inMemoryTokens: TokenState | null = null;
 
 async function fetchWithTimeout(
@@ -153,7 +193,8 @@ async function refreshAccessToken(): Promise<string | null> {
   const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/refresh`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...deviceHeaders()
     },
     body: JSON.stringify({ refreshToken: tokens.refreshToken })
   });
@@ -189,6 +230,7 @@ async function authorizedFetch(path: string, init: RequestInit = {}, retried = f
 
   const headers = {
     "Content-Type": "application/json",
+    ...deviceHeaders(),
     ...(init.headers || {}),
     Authorization: `Bearer ${tokens.accessToken}`
   };
@@ -221,6 +263,41 @@ export async function pingBackend(): Promise<boolean> {
   }
 }
 
+export type BackendHealthCheckResult = {
+  url: string;
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+  checkedAt: string;
+};
+
+export async function testBackendHealth(): Promise<BackendHealthCheckResult[]> {
+  const paths = ["/api/health", "/health"];
+  const results: BackendHealthCheckResult[] = [];
+  for (const path of paths) {
+    const url = `${API_BASE_URL}${path}`;
+    try {
+      const response = await fetchWithTimeout(url, { method: "GET" }, HEALTH_TIMEOUT_MS);
+      results.push({
+        url,
+        ok: response.ok,
+        status: response.status,
+        error: response.ok ? null : `HTTP ${response.status}`,
+        checkedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      results.push({
+        url,
+        ok: false,
+        status: null,
+        error: error instanceof Error ? error.message : "Network error",
+        checkedAt: new Date().toISOString()
+      });
+    }
+  }
+  return results;
+}
+
 export function getApiBaseUrl(): string {
   return API_BASE_URL;
 }
@@ -234,7 +311,8 @@ export async function remoteRegister(input: {
   const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/register`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...deviceHeaders()
     },
     body: JSON.stringify(input)
   });
@@ -257,7 +335,8 @@ export async function remoteLogin(username: string, password: string): Promise<A
   const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...deviceHeaders()
     },
     body: JSON.stringify({ username, password })
   });
@@ -410,10 +489,15 @@ export async function adminDeleteUser(userId: string): Promise<void> {
   }
 }
 
-export async function adminBanUser(userId: string, reason: string): Promise<void> {
+export async function adminBanUser(userId: string, reason: string, durationHours?: number): Promise<void> {
   const response = await authorizedFetch(`/api/admin/users/${userId}/ban`, {
     method: "POST",
-    body: JSON.stringify({ reason })
+    body: JSON.stringify({
+      reason,
+      durationHours: typeof durationHours === "number" && Number.isFinite(durationHours) && durationHours > 0
+        ? durationHours
+        : undefined
+    })
   });
   if (!response.ok) {
     throw new Error(await parseError(response, GENERIC_ERROR));
@@ -454,3 +538,43 @@ export async function adminRevokeUserSessions(userId: string): Promise<void> {
     throw new Error(await parseError(response, GENERIC_ERROR));
   }
 }
+
+export async function adminAddUserNote(userId: string, note: string): Promise<void> {
+  const response = await authorizedFetch(`/api/admin/users/${userId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ note })
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
+}
+
+export async function adminGetIpBans(): Promise<AdminIpBan[]> {
+  const response = await authorizedFetch("/api/admin/ip-bans", { method: "GET" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
+  const data = (await response.json()) as { items: AdminIpBan[] };
+  return data.items;
+}
+
+export async function adminAddIpBan(ipAddress: string, reason?: string): Promise<void> {
+  const response = await authorizedFetch("/api/admin/ip-bans", {
+    method: "POST",
+    body: JSON.stringify({
+      ipAddress: ipAddress.trim(),
+      reason: reason?.trim() || undefined
+    })
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
+}
+
+export async function adminRemoveIpBan(banId: string): Promise<void> {
+  const response = await authorizedFetch(`/api/admin/ip-bans/${banId}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, GENERIC_ERROR));
+  }
+}
+

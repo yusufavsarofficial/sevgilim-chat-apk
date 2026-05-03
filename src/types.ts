@@ -40,18 +40,22 @@ export type Coefficients = {
 };
 
 export type ThemePreference = "SYSTEM" | "LIGHT" | "DARK";
+export type MealTransportAccrualMethod = "WORKED_ONLY" | "WORKED_AND_ANNUAL" | "PAYABLE_ALL";
 
 export type PayrollSettings = {
   salaryMode: SalaryMode;
   monthlySalary: number;
   monthlyBaseHours: number;
+  weeklyOvertimeThresholdHours: number;
+  dailyOvertimeThresholdHours: number;
   coefficients: Coefficients;
   defaultShiftStart: string;
   defaultShiftEnd: string;
   defaultShiftHours: number;
   defaultOvertimeHours: number;
-  dailyMealFee: number;
-  dailyTransportFee: number;
+  monthlyMealAllowance: number;
+  monthlyTransportAllowance: number;
+  mealTransportAccrualMethod: MealTransportAccrualMethod;
   salaryPaymentDay: number;
   monthlyTarget: number;
   themePreference: ThemePreference;
@@ -68,7 +72,10 @@ export type DayWorkMeta = {
   start: string;
   end: string;
   totalHours: number;
-  overtimeHours: number;
+  breakMinutes: number;
+  /** Legacy/display-only. Calculations use totalHours and thresholds unless manualOvertimeOverrideHours is set. */
+  overtimeHours?: number;
+  manualOvertimeOverrideHours?: number;
 };
 
 export type DayRecord = {
@@ -107,18 +114,23 @@ export type ResignationTemplateKey =
   | "MOBBING"
   | "MILITARY"
   | "PROBATION"
-  | "WORK_CONDITION_CHANGE";
+  | "WORK_CONDITION_CHANGE"
+  | "OHS_VIOLATION"
+  | "SGK_PREMIUM_MISSING"
+  | "ANNUAL_LEAVE_DENIED";
 
 export type ResignationForm = {
   fullName: string;
   tcNo: string;
-  companyName: string;
+  workplaceTitle: string;
   department: string;
+  phone: string;
   hireDate: string;
   leaveDate: string;
   letterDate: string;
   address: string;
   explanation: string;
+  customDraft: string;
 };
 
 export type LegalSettings = {
@@ -137,14 +149,24 @@ export type LegalSettings = {
   resignationForm: ResignationForm;
 };
 
+export type PersonalProfile = {
+  fullName: string;
+  phone: string;
+  email: string;
+  address: string;
+  avatarUrl: string;
+};
+
 export type AppData = {
   settings: PayrollSettings;
   dayRecords: Record<string, DayRecord>;
   paidByMonth: Record<string, MonthPayment>;
   holidayDates: string[];
+  halfHolidayDates: string[];
   closedMonths: Record<string, boolean>;
   cloud: CloudConfig;
   legal: LegalSettings;
+  profile: PersonalProfile;
   // Legacy fields preserved for compatibility and migration
   shifts: ShiftRecord[];
   activeSession: ActiveSession | null;
@@ -152,6 +174,17 @@ export type AppData = {
 
 export type MonthlySummary = {
   monthKey: string;
+  salaryPeriodStart: string;
+  salaryPeriodEndExclusive: string;
+  salaryPeriodDisplayEnd: string;
+  overtimePeriodStart: string;
+  overtimePeriodEndExclusive: string;
+  overtimePeriodDisplayEnd: string;
+  salaryPeriodDays: number;
+  overtimePeriodDays: number;
+  payableDays: number;
+  nonPayableDays: number;
+  salaryRatioPercent: number;
   workedDays: number;
   leaveDays: number;
   annualLeaveDays: number;
@@ -161,6 +194,13 @@ export type MonthlySummary = {
   sundayWorkedDays: number;
   ubgtWorkedDays: number;
   totalHours: number;
+  dailyOvertimeHours: number;
+  weeklyOvertimeRawHours: number;
+  weeklyAdditionalOvertimeHours: number;
+  monthlyOvertimeRawHours: number;
+  monthlyAdditionalOvertimeHours: number;
+  weeklyOvertimeHours: number;
+  monthlyOvertimeHours: number;
   overtimeHours: number;
   averageDailyOvertime: number;
   hourlyRate: number;
@@ -170,6 +210,12 @@ export type MonthlySummary = {
   overtimePay: number;
   sundayPay: number;
   ubgtPay: number;
+  monthlyMealAllowance: number;
+  monthlyTransportAllowance: number;
+  mealEntitledDays: number;
+  transportEntitledDays: number;
+  mealDailyRate: number;
+  transportDailyRate: number;
   mealTotal: number;
   transportTotal: number;
   sideBenefitsTotal: number;

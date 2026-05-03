@@ -20,6 +20,25 @@ const ISO_DATE_REGEX = /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[0-1])$/;
 const TR_DATE_REGEX = /^(0[1-9]|[12]\d|3[01])\.(0[1-9]|1[0-2])\.\d{4}$/;
 
 const FIXED_HOLIDAY_MONTH_DAYS = ["01-01", "04-23", "05-01", "05-19", "07-15", "08-30", "10-29"];
+const FIXED_HALF_HOLIDAY_MONTH_DAYS = ["10-28"];
+const RELIGIOUS_FULL_HOLIDAYS_BY_YEAR: Record<number, string[]> = {
+  2024: ["2024-04-10", "2024-04-11", "2024-04-12", "2024-06-16", "2024-06-17", "2024-06-18", "2024-06-19"],
+  2025: ["2025-03-30", "2025-03-31", "2025-04-01", "2025-06-06", "2025-06-07", "2025-06-08", "2025-06-09"],
+  2026: ["2026-03-20", "2026-03-21", "2026-03-22", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30"],
+  2027: ["2027-03-10", "2027-03-11", "2027-03-12", "2027-05-17", "2027-05-18", "2027-05-19", "2027-05-20"],
+  2028: ["2028-02-27", "2028-02-28", "2028-02-29", "2028-05-05", "2028-05-06", "2028-05-07", "2028-05-08"],
+  2029: ["2029-02-15", "2029-02-16", "2029-02-17", "2029-04-24", "2029-04-25", "2029-04-26", "2029-04-27"],
+  2030: ["2030-02-04", "2030-02-05", "2030-02-06", "2030-04-14", "2030-04-15", "2030-04-16", "2030-04-17"]
+};
+const RELIGIOUS_HALF_HOLIDAYS_BY_YEAR: Record<number, string[]> = {
+  2024: ["2024-04-09", "2024-06-15"],
+  2025: ["2025-03-29", "2025-06-05"],
+  2026: ["2026-03-19", "2026-05-26"],
+  2027: ["2027-03-09", "2027-05-16"],
+  2028: ["2028-02-26", "2028-05-04"],
+  2029: ["2029-02-14", "2029-04-23"],
+  2030: ["2030-02-03", "2030-04-13"]
+};
 
 const WEEKDAY_LABELS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
 
@@ -27,21 +46,26 @@ const RESIGNATION_TEMPLATE_TEXTS = {
   STANDARD: "Kendi isteğimle işten ayrılmak istiyorum.",
   NOTICE_WITH: "İhbar süresine uyarak işten ayrılmak istiyorum.",
   NOTICE_WITHOUT: "Yasal haklarım saklı kalmak üzere ihbar süresiz ayrılış talep ediyorum.",
+  PROBATION: "Deneme süresi içinde işten ayrılıyorum.",
   RETIREMENT: "Emeklilik hakkı kazandığım için işten ayrılıyorum.",
+  MILITARY: "Askerlik görevi nedeniyle işten ayrılıyorum.",
   MARRIAGE: "Evlilik nedeniyle yasal süre içinde iş sözleşmemi feshediyorum.",
   HEALTH: "Sağlık nedenleriyle iş sözleşmemi feshediyorum.",
   SALARY_UNPAID: "Ücretlerim düzenli ödenmediği için haklı nedenle fesih bildiriyorum.",
   OVERTIME_UNPAID: "Fazla mesai ücretlerim ödenmediği için haklı nedenle fesih bildiriyorum.",
   MOBBING: "İşyerinde maruz kaldığım mobbing nedeniyle haklı nedenle fesih bildiriyorum.",
-  MILITARY: "Askerlik görevi nedeniyle işten ayrılıyorum.",
-  PROBATION: "Deneme süresi içinde işten ayrılıyorum.",
-  WORK_CONDITION_CHANGE: "İş şartlarının esaslı değişikliği nedeniyle fesih bildiriyorum."
+  WORK_CONDITION_CHANGE: "İş şartlarının esaslı değişikliği nedeniyle fesih bildiriyorum.",
+  OHS_VIOLATION: "İş sağlığı ve güvenliği ihlalleri nedeniyle haklı nedenle fesih bildiriyorum.",
+  SGK_PREMIUM_MISSING: "SGK primlerimin eksik yatırılması nedeniyle haklı nedenle fesih bildiriyorum.",
+  ANNUAL_LEAVE_DENIED: "Yıllık izin hakkımın kullandırılmaması nedeniyle başvuru/fesih talebinde bulunuyorum."
 } as const;
 
 export const DEFAULT_SETTINGS: PayrollSettings = {
   salaryMode: "NET",
   monthlySalary: 28075,
   monthlyBaseHours: 225,
+  weeklyOvertimeThresholdHours: 45,
+  dailyOvertimeThresholdHours: 7.5,
   coefficients: {
     overtime: 1.5,
     sunday: 2.5,
@@ -51,11 +75,12 @@ export const DEFAULT_SETTINGS: PayrollSettings = {
   defaultShiftEnd: "08:00",
   defaultShiftHours: 12,
   defaultOvertimeHours: 4.5,
-  dailyMealFee: 0,
-  dailyTransportFee: 0,
+  monthlyMealAllowance: 9900,
+  monthlyTransportAllowance: 3298,
+  mealTransportAccrualMethod: "WORKED_ONLY",
   salaryPaymentDay: 5,
   monthlyTarget: 0,
-  themePreference: "SYSTEM"
+  themePreference: "DARK"
 };
 
 export const DEFAULT_MONTH_PAYMENT: MonthPayment = {
@@ -72,6 +97,7 @@ export const DEFAULT_DATA: AppData = {
   dayRecords: {},
   paidByMonth: {},
   holidayDates: defaultHolidayDates(),
+  halfHolidayDates: defaultHalfHolidayDates(),
   closedMonths: {},
   cloud: {
     enabled: false,
@@ -95,14 +121,23 @@ export const DEFAULT_DATA: AppData = {
     resignationForm: {
       fullName: "",
       tcNo: "",
-      companyName: "",
+      workplaceTitle: "",
       department: "",
+      phone: "",
       hireDate: "",
       leaveDate: "",
       letterDate: "",
       address: "",
-      explanation: ""
+      explanation: "",
+      customDraft: ""
     }
+  },
+  profile: {
+    fullName: "",
+    phone: "",
+    email: "",
+    address: "",
+    avatarUrl: ""
   },
   shifts: [],
   activeSession: null
@@ -110,15 +145,32 @@ export const DEFAULT_DATA: AppData = {
 
 export function defaultHolidayDates(): string[] {
   const today = new Date();
-  const years = [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1];
+  const years = [...new Set([2024, 2025, 2026, 2027, 2028, 2029, 2030, today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1])];
   const dateSet = new Set<string>();
 
   for (const year of years) {
     for (const monthDay of FIXED_HOLIDAY_MONTH_DAYS) {
       dateSet.add(`${year}-${monthDay}`);
     }
+    for (const dateKey of RELIGIOUS_FULL_HOLIDAYS_BY_YEAR[year] ?? []) {
+      dateSet.add(dateKey);
+    }
   }
 
+  return [...dateSet].sort();
+}
+
+export function defaultHalfHolidayDates(): string[] {
+  const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+  const dateSet = new Set<string>();
+  for (const year of years) {
+    for (const monthDay of FIXED_HALF_HOLIDAY_MONTH_DAYS) {
+      dateSet.add(`${year}-${monthDay}`);
+    }
+    for (const dateKey of RELIGIOUS_HALF_HOLIDAYS_BY_YEAR[year] ?? []) {
+      dateSet.add(dateKey);
+    }
+  }
   return [...dateSet].sort();
 }
 
@@ -134,8 +186,40 @@ export function safePositive(value: number): number {
 }
 
 export function tryParseNumber(value: string): number {
-  const parsed = Number(value.replace(/\s/g, "").replace(",", "."));
+  const timeMatch = value.trim().match(/^(\d{1,2}):([0-5]\d)$/);
+  if (timeMatch) {
+    const hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    const parsedTime = hours + minutes / 60;
+    return Number.isFinite(parsedTime) ? parsedTime : 0;
+  }
+
+  const normalized = value
+    .replace(/\s/g, "")
+    .replace(/[^\d,.-]/g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function weekKeyOf(dateKey: string): string {
+  const date = dateKeyToDate(dateKey);
+  if (!date) {
+    return dateKey;
+  }
+  const monday = new Date(date);
+  const day = monday.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  monday.setDate(monday.getDate() + diff);
+  return toDateKey(monday);
+}
+
+export function calculateDailyOvertimeHours(totalHours: number, settings: PayrollSettings, manualOverride?: number): number {
+  if (typeof manualOverride === "number" && Number.isFinite(manualOverride)) {
+    return round2(safePositive(manualOverride));
+  }
+  const threshold = safePositive(settings.dailyOvertimeThresholdHours || 7.5) || 7.5;
+  return round2(Math.max(0, safePositive(totalHours) - threshold));
 }
 
 export function maskTrDateInput(input: string): string {
@@ -257,6 +341,20 @@ export function isSundayDate(dateKey: string): boolean {
   return date.getDay() === 0;
 }
 
+export const isSunday = isSundayDate;
+
+export function isOfficialHoliday(dateKey: string, holidayDates: string[] = defaultHolidayDates()): boolean {
+  return holidayDates.includes(dateKey);
+}
+
+export function isReligiousHoliday(dateKey: string): boolean {
+  return Object.values(RELIGIOUS_FULL_HOLIDAYS_BY_YEAR).some((items) => items.includes(dateKey));
+}
+
+export function isHalfDayHoliday(dateKey: string, halfHolidayDates: string[] = defaultHalfHolidayDates()): boolean {
+  return halfHolidayDates.includes(dateKey);
+}
+
 export function formatDateKeyTr(dateKey: string): string {
   const date = dateKeyToDate(dateKey);
   if (!date) {
@@ -298,14 +396,32 @@ export function dateKeyToDate(dateKey: string): Date | null {
   return date;
 }
 
-export function dayTypeOf(dateKey: string, holidayDates: string[]): DayType {
-  if (holidayDates.includes(dateKey)) {
+export function dayTypeOf(dateKey: string, holidayDates: string[], halfHolidayDates: string[] = []): DayType {
+  if (holidayDates.includes(dateKey) || halfHolidayDates.includes(dateKey)) {
     return "UBGT";
   }
   if (isSundayDate(dateKey)) {
     return "SUNDAY";
   }
   return "NORMAL";
+}
+
+export function isMealTransportEligible(
+  dateKey: string,
+  dayType: DayType,
+  status: DayStatus | null,
+  halfHolidayDates: string[] = []
+): boolean {
+  if (status !== "WORKED") {
+    return false;
+  }
+  if (dayType === "SUNDAY" || dayType === "UBGT") {
+    return false;
+  }
+  if (isSundayDate(dateKey) || isHalfDayHoliday(dateKey, halfHolidayDates)) {
+    return false;
+  }
+  return true;
 }
 
 export function dayTypeLabel(dayType: DayType): string {
@@ -334,19 +450,19 @@ export function dayStatusShort(status: DayStatus | null): string {
 
 export function dayStatusColor(status: DayStatus | null, dayType: DayType, inMonth: boolean): string {
   if (!inMonth) {
-    return "#f3f4f6";
+    return "#0b1220";
   }
-  if (status === null) return "#ffffff";
-  if (status === "LEAVE") return "#dbeafe";
-  if (status === "ANNUAL_LEAVE") return "#ffedd5";
-  if (status === "REPORT") return "#fef9c3";
-  if (status === "HOLIDAY_OFF") return "#e5e7eb";
+  if (status === null) return "#0f172a";
+  if (status === "LEAVE") return "#1e3a8a";
+  if (status === "ANNUAL_LEAVE") return "#7c2d12";
+  if (status === "REPORT") return "#92400e";
+  if (status === "HOLIDAY_OFF") return "#334155";
   if (status === "WORKED") {
-    if (dayType === "UBGT") return "#fecaca";
-    if (dayType === "SUNDAY") return "#ede9fe";
-    return "#dcfce7";
+    if (dayType === "UBGT") return "#7f1d1d";
+    if (dayType === "SUNDAY") return "#312e81";
+    return "#0b3f3a";
   }
-  return "#ffffff";
+  return "#0f172a";
 }
 
 export function buildMonthGrid(monthKey: string): MonthGridDay[][] {
@@ -420,7 +536,7 @@ export function createWorkedRecord(dateKey: string, settings: PayrollSettings, i
       start: settings.defaultShiftStart,
       end: settings.defaultShiftEnd,
       totalHours: safePositive(settings.defaultShiftHours),
-      overtimeHours: safePositive(settings.defaultOvertimeHours)
+      breakMinutes: 0
     },
     note: "",
     updatedAt: new Date().toISOString()
@@ -465,19 +581,111 @@ export function normalizeMonthPayment(value: unknown): MonthPayment {
   };
 }
 
+function pad2(value: number): string {
+  return `${value}`.padStart(2, "0");
+}
+
+function safeMonthDay(year: number, monthIndex: number, day: number): number {
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  return Math.min(Math.max(day, 1), daysInMonth);
+}
+
+function dateKeyFromParts(year: number, monthIndex: number, day: number): string {
+  return `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+}
+
+function previousDateKey(dateKey: string): string {
+  const date = dateKeyToDate(dateKey);
+  if (!date) {
+    return "";
+  }
+  date.setDate(date.getDate() - 1);
+  return toDateKey(date);
+}
+
+function periodBounds(
+  monthKey: string,
+  anchorDay: number
+): { startInclusive: string; endExclusive: string; displayEnd: string } | null {
+  const monthDate = monthKeyToDate(monthKey);
+  if (!monthDate) {
+    return null;
+  }
+
+  const endYear = monthDate.getFullYear();
+  const endMonthIndex = monthDate.getMonth();
+  const startDate = new Date(endYear, endMonthIndex - 1, 1);
+  const startYear = startDate.getFullYear();
+  const startMonthIndex = startDate.getMonth();
+
+  const startDay = safeMonthDay(startYear, startMonthIndex, anchorDay);
+  const endDay = safeMonthDay(endYear, endMonthIndex, anchorDay);
+
+  const startInclusive = dateKeyFromParts(startYear, startMonthIndex, startDay);
+  const endExclusive = dateKeyFromParts(endYear, endMonthIndex, endDay);
+  const displayEnd = previousDateKey(endExclusive);
+
+  return {
+    startInclusive,
+    endExclusive,
+    displayEnd
+  };
+}
+
+function enumerateDateKeys(startInclusiveKey: string, endExclusiveKey: string): string[] {
+  // start inclusive - end exclusive
+  const start = dateKeyToDate(startInclusiveKey);
+  const endExclusive = dateKeyToDate(endExclusiveKey);
+  if (!start || !endExclusive || start.getTime() >= endExclusive.getTime()) {
+    return [];
+  }
+
+  const result: string[] = [];
+  const current = new Date(start);
+  while (current.getTime() < endExclusive.getTime()) {
+    result.push(toDateKey(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return result;
+}
+
 export function calculateMonthlySummary(
   dayRecords: Record<string, DayRecord>,
   settings: PayrollSettings,
   paidByMonth: Record<string, MonthPayment>,
   monthKey: string,
-  holidayDates: string[]
+  holidayDates: string[],
+  halfHolidayDates: string[] = []
 ): MonthlySummary {
   const monthDate = monthKeyToDate(monthKey);
-  if (!monthDate) {
+  const salaryPeriod = monthDate
+    ? (() => {
+        const year = monthDate.getFullYear();
+        const monthIndex = monthDate.getMonth();
+        const startInclusive = dateKeyFromParts(year, monthIndex, 1);
+        const endExclusiveDate = new Date(year, monthIndex + 1, 1);
+        const endExclusive = toDateKey(endExclusiveDate);
+        const displayEnd = previousDateKey(endExclusive);
+        return { startInclusive, endExclusive, displayEnd };
+      })()
+    : null;
+  const overtimePeriod = salaryPeriod;
+  if (!salaryPeriod || !overtimePeriod) {
     const paid = normalizeMonthPayment(paidByMonth[monthKey]);
     const paidTotal = paid.salary + paid.overtime + paid.sunday + paid.ubgt + paid.meal + paid.transport;
     return {
       monthKey,
+      salaryPeriodStart: "",
+      salaryPeriodEndExclusive: "",
+      salaryPeriodDisplayEnd: "",
+      overtimePeriodStart: "",
+      overtimePeriodEndExclusive: "",
+      overtimePeriodDisplayEnd: "",
+      salaryPeriodDays: 0,
+      overtimePeriodDays: 0,
+      payableDays: 0,
+      nonPayableDays: 0,
+      salaryRatioPercent: 0,
       workedDays: 0,
       leaveDays: 0,
       annualLeaveDays: 0,
@@ -487,6 +695,13 @@ export function calculateMonthlySummary(
       sundayWorkedDays: 0,
       ubgtWorkedDays: 0,
       totalHours: 0,
+      dailyOvertimeHours: 0,
+      weeklyOvertimeRawHours: 0,
+      weeklyAdditionalOvertimeHours: 0,
+      monthlyOvertimeRawHours: 0,
+      monthlyAdditionalOvertimeHours: 0,
+      weeklyOvertimeHours: 0,
+      monthlyOvertimeHours: 0,
       overtimeHours: 0,
       averageDailyOvertime: 0,
       hourlyRate: 0,
@@ -496,6 +711,12 @@ export function calculateMonthlySummary(
       overtimePay: 0,
       sundayPay: 0,
       ubgtPay: 0,
+      monthlyMealAllowance: 0,
+      monthlyTransportAllowance: 0,
+      mealEntitledDays: 0,
+      transportEntitledDays: 0,
+      mealDailyRate: 0,
+      transportDailyRate: 0,
       mealTotal: 0,
       transportTotal: 0,
       sideBenefitsTotal: 0,
@@ -506,26 +727,30 @@ export function calculateMonthlySummary(
     };
   }
 
-  const year = monthDate.getFullYear();
-  const monthIndex = monthDate.getMonth();
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const salaryDateKeys = enumerateDateKeys(salaryPeriod.startInclusive, salaryPeriod.endExclusive);
+  const overtimeDateKeys = enumerateDateKeys(overtimePeriod.startInclusive, overtimePeriod.endExclusive);
+  const salaryPeriodDays = salaryDateKeys.length;
+  const overtimePeriodDays = overtimeDateKeys.length;
 
   let workedDays = 0;
   let leaveDays = 0;
   let annualLeaveDays = 0;
   let reportDays = 0;
   let holidayOffDays = 0;
+  let payableDays = 0;
   let normalWorkedDays = 0;
   let sundayWorkedDays = 0;
   let ubgtWorkedDays = 0;
 
   let totalHours = 0;
-  let overtimeHours = 0;
+  let dailyOvertimeHours = 0;
   let sundayHours = 0;
   let ubgtHours = 0;
+  const weeklyHours = new Map<string, number>();
+  const weeklyDailyOvertime = new Map<string, number>();
+  const weeklyOvertimeThreshold = safePositive(settings.weeklyOvertimeThresholdHours || 45) || 45;
 
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const dateKey = `${monthKey}-${`${day}`.padStart(2, "0")}`;
+  for (const dateKey of salaryDateKeys) {
     const record = dayRecords[dateKey];
 
     if (!record || record.status === null) {
@@ -534,21 +759,14 @@ export function calculateMonthlySummary(
 
     if (record.status === "WORKED") {
       workedDays += 1;
-      const kind = dayTypeOf(dateKey, holidayDates);
       const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
-      const workedOvertime = safePositive(record.work?.overtimeHours ?? settings.defaultOvertimeHours);
+      const dayOvertime = calculateDailyOvertimeHours(workHours, settings, record.work?.manualOvertimeOverrideHours);
+      const weekKey = weekKeyOf(dateKey);
       totalHours += workHours;
-      overtimeHours += workedOvertime;
-
-      if (kind === "UBGT") {
-        ubgtWorkedDays += 1;
-        ubgtHours += workHours;
-      } else if (kind === "SUNDAY") {
-        sundayWorkedDays += 1;
-        sundayHours += workHours;
-      } else {
-        normalWorkedDays += 1;
-      }
+      dailyOvertimeHours += dayOvertime;
+      weeklyHours.set(weekKey, safePositive(weeklyHours.get(weekKey) ?? 0) + workHours);
+      weeklyDailyOvertime.set(weekKey, safePositive(weeklyDailyOvertime.get(weekKey) ?? 0) + dayOvertime);
+      payableDays += 1;
       continue;
     }
 
@@ -559,6 +777,7 @@ export function calculateMonthlySummary(
 
     if (record.status === "ANNUAL_LEAVE") {
       annualLeaveDays += 1;
+      payableDays += 1;
       continue;
     }
 
@@ -567,24 +786,82 @@ export function calculateMonthlySummary(
       continue;
     }
 
+    // HOLIDAY_OFF: ücretli tatil olarak ödenebilir güne dahil edilir.
     holidayOffDays += 1;
+    payableDays += 1;
+  }
+
+  for (const dateKey of overtimeDateKeys) {
+    const record = dayRecords[dateKey];
+    if (!record || record.status !== "WORKED") {
+      continue;
+    }
+
+    const kind = dayTypeOf(dateKey, holidayDates, halfHolidayDates);
+    const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
+
+    if (kind === "UBGT") {
+      ubgtWorkedDays += 1;
+      ubgtHours += workHours;
+    } else if (kind === "SUNDAY") {
+      sundayWorkedDays += 1;
+      sundayHours += workHours;
+    } else {
+      normalWorkedDays += 1;
+    }
   }
 
   const monthlySalary = safePositive(settings.monthlySalary);
   const monthlyBaseHours = safePositive(settings.monthlyBaseHours);
   const salaryConfigured = monthlySalary > 0 && monthlyBaseHours > 0;
   const hourlyRate = salaryConfigured ? monthlySalary / monthlyBaseHours : 0;
-  const dailySalary = salaryConfigured ? monthlySalary / 30 : 0;
-  const payableWorkedDays = Math.min(30, workedDays);
-  const baseSalary = salaryConfigured ? payableWorkedDays * dailySalary : 0;
+  let weeklyOvertimeRawHours = 0;
+  let weeklyAdditionalOvertimeHours = 0;
+  for (const [weekKey, hours] of weeklyHours.entries()) {
+    const raw = Math.max(0, hours - weeklyOvertimeThreshold);
+    const countedDaily = safePositive(weeklyDailyOvertime.get(weekKey) ?? 0);
+    weeklyOvertimeRawHours += raw;
+    weeklyAdditionalOvertimeHours += Math.max(0, raw - countedDaily);
+  }
+  const monthlyOvertimeRawHours = Math.max(0, totalHours - Math.max(1, monthlyBaseHours || 225));
+  const monthlyAdditionalOvertimeHours = Math.max(
+    0,
+    monthlyOvertimeRawHours - dailyOvertimeHours - weeklyAdditionalOvertimeHours
+  );
+  const overtimeHours = dailyOvertimeHours + weeklyAdditionalOvertimeHours + monthlyAdditionalOvertimeHours;
+  const salaryRatioRaw = salaryPeriodDays > 0 ? Math.min(1, Math.max(0, payableDays / salaryPeriodDays)) : 0;
+  const baseSalary = salaryConfigured ? monthlySalary * salaryRatioRaw : 0;
   const reportDeduction = salaryConfigured ? Math.max(0, monthlySalary - baseSalary) : 0;
   const overtimePay = salaryConfigured
     ? overtimeHours * hourlyRate * safePositive(settings.coefficients.overtime)
     : 0;
   const sundayPay = salaryConfigured ? sundayHours * hourlyRate * safePositive(settings.coefficients.sunday) : 0;
   const ubgtPay = salaryConfigured ? ubgtHours * hourlyRate * safePositive(settings.coefficients.holiday) : 0;
-  const mealTotal = workedDays * safePositive(settings.dailyMealFee);
-  const transportTotal = workedDays * safePositive(settings.dailyTransportFee);
+
+  const monthlyMealAllowance = safePositive(settings.monthlyMealAllowance);
+  const monthlyTransportAllowance = safePositive(settings.monthlyTransportAllowance);
+  const mealDailyRate = salaryPeriodDays > 0 ? monthlyMealAllowance / salaryPeriodDays : 0;
+  const transportDailyRate = salaryPeriodDays > 0 ? monthlyTransportAllowance / salaryPeriodDays : 0;
+
+  let benefitEligibleWorkedDays = 0;
+  for (const dateKey of salaryDateKeys) {
+    const record = dayRecords[dateKey];
+    const kind = dayTypeOf(dateKey, holidayDates, halfHolidayDates);
+    if (isMealTransportEligible(dateKey, kind, record?.status ?? null, halfHolidayDates)) {
+      benefitEligibleWorkedDays += 1;
+    }
+  }
+  let entitlementDays = benefitEligibleWorkedDays;
+  if (settings.mealTransportAccrualMethod === "WORKED_AND_ANNUAL") {
+    entitlementDays = benefitEligibleWorkedDays + annualLeaveDays;
+  } else if (settings.mealTransportAccrualMethod === "PAYABLE_ALL") {
+    entitlementDays = benefitEligibleWorkedDays + annualLeaveDays;
+  }
+  const mealEntitledDays = Math.max(0, Math.min(salaryPeriodDays, entitlementDays));
+  const transportEntitledDays = Math.max(0, Math.min(salaryPeriodDays, entitlementDays));
+
+  const mealTotal = mealDailyRate * mealEntitledDays;
+  const transportTotal = transportDailyRate * transportEntitledDays;
   const sideBenefitsTotal = mealTotal + transportTotal;
   const averageDailyOvertime = workedDays > 0 ? overtimeHours / workedDays : 0;
 
@@ -595,6 +872,17 @@ export function calculateMonthlySummary(
 
   return {
     monthKey,
+    salaryPeriodStart: salaryPeriod.startInclusive,
+    salaryPeriodEndExclusive: salaryPeriod.endExclusive,
+    salaryPeriodDisplayEnd: salaryPeriod.displayEnd,
+    overtimePeriodStart: overtimePeriod.startInclusive,
+    overtimePeriodEndExclusive: overtimePeriod.endExclusive,
+    overtimePeriodDisplayEnd: overtimePeriod.displayEnd,
+    salaryPeriodDays,
+    overtimePeriodDays,
+    payableDays,
+    nonPayableDays: Math.max(0, salaryPeriodDays - payableDays),
+    salaryRatioPercent: round2(salaryRatioRaw * 100),
     workedDays,
     leaveDays,
     annualLeaveDays,
@@ -604,6 +892,13 @@ export function calculateMonthlySummary(
     sundayWorkedDays,
     ubgtWorkedDays,
     totalHours: round2(totalHours),
+    dailyOvertimeHours: round2(dailyOvertimeHours),
+    weeklyOvertimeRawHours: round2(weeklyOvertimeRawHours),
+    weeklyAdditionalOvertimeHours: round2(weeklyAdditionalOvertimeHours),
+    monthlyOvertimeRawHours: round2(monthlyOvertimeRawHours),
+    monthlyAdditionalOvertimeHours: round2(monthlyAdditionalOvertimeHours),
+    weeklyOvertimeHours: round2(weeklyOvertimeRawHours),
+    monthlyOvertimeHours: round2(monthlyOvertimeRawHours),
     overtimeHours: round2(overtimeHours),
     averageDailyOvertime: round2(averageDailyOvertime),
     hourlyRate: round2(hourlyRate),
@@ -613,6 +908,12 @@ export function calculateMonthlySummary(
     overtimePay: round2(overtimePay),
     sundayPay: round2(sundayPay),
     ubgtPay: round2(ubgtPay),
+    monthlyMealAllowance: round2(monthlyMealAllowance),
+    monthlyTransportAllowance: round2(monthlyTransportAllowance),
+    mealEntitledDays,
+    transportEntitledDays,
+    mealDailyRate: round2(mealDailyRate),
+    transportDailyRate: round2(transportDailyRate),
     mealTotal: round2(mealTotal),
     transportTotal: round2(transportTotal),
     sideBenefitsTotal: round2(sideBenefitsTotal),
@@ -679,13 +980,18 @@ export function calculateMonthlyAnalytics(
     }
 
     const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
-    const overHours = safePositive(record.work?.overtimeHours ?? settings.defaultOvertimeHours);
+    const overHours = calculateDailyOvertimeHours(
+      workHours,
+      settings,
+      record.work?.manualOvertimeOverrideHours
+    );
     const dayType = dayTypeOf(dateKey, holidayDates);
     const hourlyRate = safePositive(summary.hourlyRate);
     const overtimePay = overHours * hourlyRate * safePositive(settings.coefficients.overtime);
     const sundayPay = dayType === "SUNDAY" ? workHours * hourlyRate * safePositive(settings.coefficients.sunday) : 0;
     const ubgtPay = dayType === "UBGT" ? workHours * hourlyRate * safePositive(settings.coefficients.holiday) : 0;
-    const benefitPay = safePositive(settings.dailyMealFee) + safePositive(settings.dailyTransportFee);
+    const benefitPay =
+      dayType === "NORMAL" ? safePositive(summary.mealDailyRate) + safePositive(summary.transportDailyRate) : 0;
     const dayTotal = overtimePay + sundayPay + ubgtPay + benefitPay;
 
     if (dayTotal > mostEarningDayAmount) {
@@ -915,8 +1221,9 @@ export function buildResignationDraft(input: {
   template: keyof typeof RESIGNATION_TEMPLATE_TEXTS;
   fullName: string;
   tcNo: string;
-  companyName: string;
+  workplaceTitle: string;
   department: string;
+  phone: string;
   hireDate: string;
   leaveDate: string;
   letterDate: string;
@@ -928,9 +1235,10 @@ export function buildResignationDraft(input: {
     "İSTİFA DİLEKÇESİ",
     "",
     `Tarih: ${input.letterDate || "..../..../........"}`,
-    `İşveren: ${input.companyName || "............................"}`,
+    `İş Yeri / Ünvan: ${input.workplaceTitle || "............................"}`,
     `Departman: ${input.department || "............................"}`,
     `Adres: ${input.address || "............................"}`,
+    `Telefon: ${input.phone || "............................"}`,
     "",
     `İşe Giriş Tarihi: ${input.hireDate || "..../..../........"}`,
     `Ayrılış Tarihi: ${input.leaveDate || "..../..../........"}`,

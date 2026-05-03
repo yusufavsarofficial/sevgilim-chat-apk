@@ -5,6 +5,7 @@ import {
   isIsoDate,
   maskTrDateInput,
   normalizeMonthPayment,
+  round2,
   safePositive,
   tryParseNumber
 } from "./payroll";
@@ -13,6 +14,7 @@ import {
   DayRecord,
   DayStatus,
   LegalSettings,
+  PersonalProfile,
   ResignationForm,
   ResignationTemplateKey,
   ShiftRecord,
@@ -33,10 +35,15 @@ function normalizeStatus(value: unknown): DayStatus | null {
 }
 
 function normalizeThemePreference(value: unknown): ThemePreference {
-  if (value === "SYSTEM" || value === "LIGHT" || value === "DARK") {
+  void value;
+  return "DARK";
+}
+
+function normalizeMealTransportAccrualMethod(value: unknown): "WORKED_ONLY" | "WORKED_AND_ANNUAL" | "PAYABLE_ALL" {
+  if (value === "WORKED_AND_ANNUAL" || value === "PAYABLE_ALL") {
     return value;
   }
-  return "SYSTEM";
+  return "WORKED_ONLY";
 }
 
 function legacyShiftHours(shift: ShiftRecord): { totalHours: number; overtimeHours: number } {
@@ -78,14 +85,21 @@ function normalizeDayRecordMap(raw: unknown, fallbackData: AppData): Record<stri
               start: String(source.work.start ?? fallbackData.settings.defaultShiftStart),
               end: String(source.work.end ?? fallbackData.settings.defaultShiftEnd),
               totalHours: safePositive(tryParseNumber(String(source.work.totalHours ?? 0))),
-              overtimeHours: safePositive(tryParseNumber(String(source.work.overtimeHours ?? 0)))
+              breakMinutes: safePositive(tryParseNumber(String((source.work as { breakMinutes?: unknown }).breakMinutes ?? 0))),
+              overtimeHours: safePositive(tryParseNumber(String(source.work.overtimeHours ?? 0))),
+              manualOvertimeOverrideHours:
+                (source.work as { manualOvertimeOverrideHours?: unknown }).manualOvertimeOverrideHours === undefined
+                  ? undefined
+                  : safePositive(
+                      tryParseNumber(String((source.work as { manualOvertimeOverrideHours?: unknown }).manualOvertimeOverrideHours))
+                    )
             }
           : status === "WORKED"
             ? {
                 start: fallbackData.settings.defaultShiftStart,
                 end: fallbackData.settings.defaultShiftEnd,
                 totalHours: fallbackData.settings.defaultShiftHours,
-                overtimeHours: fallbackData.settings.defaultOvertimeHours
+                breakMinutes: 0
               }
             : null,
       note: typeof source.note === "string" ? source.note : "",
@@ -120,7 +134,10 @@ function normalizeResignationTemplate(value: unknown): ResignationTemplateKey {
     "MOBBING",
     "MILITARY",
     "PROBATION",
-    "WORK_CONDITION_CHANGE"
+    "WORK_CONDITION_CHANGE",
+    "OHS_VIOLATION",
+    "SGK_PREMIUM_MISSING",
+    "ANNUAL_LEAVE_DENIED"
   ];
   if (typeof value === "string" && valid.includes(value as ResignationTemplateKey)) {
     return value as ResignationTemplateKey;
@@ -138,13 +155,23 @@ function normalizeResignationForm(raw: unknown): ResignationForm {
   return {
     fullName: typeof source.fullName === "string" ? source.fullName : fallback.fullName,
     tcNo: typeof source.tcNo === "string" ? source.tcNo : fallback.tcNo,
-    companyName: typeof source.companyName === "string" ? source.companyName : fallback.companyName,
+    workplaceTitle:
+      typeof (source as { workplaceTitle?: unknown }).workplaceTitle === "string"
+        ? ((source as { workplaceTitle?: string }).workplaceTitle ?? "")
+        : typeof (source as { companyName?: unknown }).companyName === "string"
+          ? ((source as { companyName?: string }).companyName ?? "")
+          : fallback.workplaceTitle,
     department: typeof source.department === "string" ? source.department : fallback.department,
+    phone: typeof (source as { phone?: unknown }).phone === "string" ? ((source as { phone?: string }).phone ?? "") : fallback.phone,
     hireDate: typeof source.hireDate === "string" ? maskTrDateInput(source.hireDate) : fallback.hireDate,
     leaveDate: typeof source.leaveDate === "string" ? maskTrDateInput(source.leaveDate) : fallback.leaveDate,
     letterDate: typeof source.letterDate === "string" ? maskTrDateInput(source.letterDate) : fallback.letterDate,
     address: typeof source.address === "string" ? source.address : fallback.address,
-    explanation: typeof source.explanation === "string" ? source.explanation : fallback.explanation
+    explanation: typeof source.explanation === "string" ? source.explanation : fallback.explanation,
+    customDraft:
+      typeof (source as { customDraft?: unknown }).customDraft === "string"
+        ? ((source as { customDraft?: string }).customDraft ?? "")
+        : fallback.customDraft
   };
 }
 
@@ -192,11 +219,57 @@ function normalizeLegalSettings(raw: unknown): LegalSettings {
   };
 }
 
+function normalizePersonalProfile(raw: unknown): PersonalProfile {
+  const fallback = DEFAULT_DATA.profile;
+  if (!raw || typeof raw !== "object") {
+    return { ...fallback };
+  }
+
+  const source = raw as Partial<PersonalProfile>;
+  return {
+    fullName: typeof source.fullName === "string" ? source.fullName : fallback.fullName,
+    phone: typeof source.phone === "string" ? source.phone : fallback.phone,
+    email: typeof source.email === "string" ? source.email : fallback.email,
+    address: typeof source.address === "string" ? source.address : fallback.address,
+    avatarUrl: typeof source.avatarUrl === "string" ? source.avatarUrl : fallback.avatarUrl
+  };
+}
+
 function mergeWithDefaults(parsed: Partial<AppData>): AppData {
+  const rawSettings = (parsed.settings ?? {}) as Partial<AppData["settings"]> & {
+    dailyMealFee?: number;
+    dailyTransportFee?: number;
+  };
+  const legacyDailyMeal = safePositive(tryParseNumber(String(rawSettings.dailyMealFee ?? 0)));
+  const legacyDailyTransport = safePositive(tryParseNumber(String(rawSettings.dailyTransportFee ?? 0)));
+  const migratedMonthlyMeal =
+    rawSettings.monthlyMealAllowance !== undefined
+      ? safePositive(tryParseNumber(String(rawSettings.monthlyMealAllowance)))
+      : legacyDailyMeal > 0
+        ? round2(legacyDailyMeal * 30)
+        : DEFAULT_DATA.settings.monthlyMealAllowance;
+  const migratedMonthlyTransport =
+    rawSettings.monthlyTransportAllowance !== undefined
+      ? safePositive(tryParseNumber(String(rawSettings.monthlyTransportAllowance)))
+      : legacyDailyTransport > 0
+        ? round2(legacyDailyTransport * 30)
+        : DEFAULT_DATA.settings.monthlyTransportAllowance;
+
   const baseSettings = {
     ...DEFAULT_DATA.settings,
-    ...(parsed.settings ?? {}),
+    ...rawSettings,
     themePreference: normalizeThemePreference(parsed.settings?.themePreference),
+    dailyOvertimeThresholdHours: safePositive(
+      tryParseNumber(String(rawSettings.dailyOvertimeThresholdHours ?? DEFAULT_DATA.settings.dailyOvertimeThresholdHours))
+    ),
+    weeklyOvertimeThresholdHours: safePositive(
+      tryParseNumber(String(rawSettings.weeklyOvertimeThresholdHours ?? DEFAULT_DATA.settings.weeklyOvertimeThresholdHours))
+    ),
+    monthlyMealAllowance: migratedMonthlyMeal,
+    monthlyTransportAllowance: migratedMonthlyTransport,
+    mealTransportAccrualMethod: normalizeMealTransportAccrualMethod(
+      (parsed.settings as { mealTransportAccrualMethod?: unknown } | undefined)?.mealTransportAccrualMethod
+    ),
     coefficients: {
       ...DEFAULT_DATA.settings.coefficients,
       ...(parsed.settings?.coefficients ?? {})
@@ -212,12 +285,22 @@ function mergeWithDefaults(parsed: Partial<AppData>): AppData {
     holidayDates: Array.isArray(parsed.holidayDates)
       ? [...new Set(parsed.holidayDates.filter(isIsoDate))].sort()
       : DEFAULT_DATA.holidayDates,
+    halfHolidayDates: Array.isArray((parsed as { halfHolidayDates?: unknown }).halfHolidayDates)
+      ? [
+          ...new Set(
+            ((parsed as { halfHolidayDates?: unknown }).halfHolidayDates as unknown[]).filter(
+              (item): item is string => typeof item === "string" && isIsoDate(item)
+            )
+          )
+        ].sort()
+      : DEFAULT_DATA.halfHolidayDates,
     closedMonths: parsed.closedMonths && typeof parsed.closedMonths === "object" ? parsed.closedMonths : {},
     cloud: {
       ...DEFAULT_DATA.cloud,
       ...(parsed.cloud ?? {})
     },
     legal: normalizeLegalSettings(parsed.legal),
+    profile: normalizePersonalProfile((parsed as { profile?: unknown }).profile),
     shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
     activeSession: null
   };
@@ -238,6 +321,7 @@ function mergeWithDefaults(parsed: Partial<AppData>): AppData {
           start: legacy.work?.start ?? baseSettings.defaultShiftStart,
           end: legacy.work?.end ?? baseSettings.defaultShiftEnd,
           totalHours: hours.totalHours,
+          breakMinutes: safePositive(shift.breakMinutes),
           overtimeHours: hours.overtimeHours
         },
         note: shift.note ?? ""

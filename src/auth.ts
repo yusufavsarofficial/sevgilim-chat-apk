@@ -50,9 +50,9 @@ const CONSENT_LOG_KEY = "@puantaj-maas-apk:auth:consent-log:v1";
 const USER_DATA_PREFIX = "@puantaj-maas-apk:data:v5:";
 export const CONSENT_VERSION = "2026.05.02";
 
-const FIXED_ADMIN_USERNAME = "Yusuf";
-const FIXED_ADMIN_PASSWORD_HASH = "c3451b6107562d64e47292af94e8dd0ee16f8dc425b1c49d51196631e2292551";
-const FIXED_INVITE_KEY_HASH = "0ac5c8a0408bb091b81da0f486a2a70b45b6bbe5924bd5f62facbac802503039";
+const FIXED_ADMIN_USERNAME = "Ayf";
+const FIXED_ADMIN_PASSWORD_HASH = "3bbe665633d6edfd61e91598560db3fee78a21da78b3fe77e9fefac5ecfc4cc1";
+const FIXED_INVITE_KEY_HASH = "3825b97592ef25f0bb0fb784a3bfe0b016b1e27e134cff2379b69f85842cf52f";
 
 const MAX_FAIL = 5;
 const LOCK_MS = 5 * 60 * 1000;

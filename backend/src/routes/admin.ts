@@ -6,8 +6,12 @@ import { createAuditLog } from "../utils/audit.js";
 import { normalizeUsername } from "../utils/security.js";
 
 const userIdParamSchema = z.object({ id: z.string().uuid() });
-const banSchema = z.object({ reason: z.string().min(1).max(500) });
+const banSchema = z.object({
+  reason: z.string().min(1).max(500),
+  durationHours: z.number().positive().max(24 * 365).optional()
+});
 const ipBanSchema = z.object({ ipAddress: z.string().min(3).max(120), reason: z.string().max(500).optional() });
+const adminNoteSchema = z.object({ note: z.string().min(1).max(2000) });
 const createUserSchema = z.object({
   username: z.string().min(3).max(40),
   password: z.string().min(6).max(120),
@@ -26,6 +30,8 @@ function toUserDetail(row: {
   is_banned: boolean;
   is_active: boolean;
   ban_reason: string | null;
+  banned_until: string | null;
+  failed_login_count: number;
   created_at: string;
   last_login_at: string | null;
   last_ip: string | null;
@@ -38,6 +44,8 @@ function toUserDetail(row: {
     isBanned: row.is_banned,
     isActive: row.is_active,
     banReason: row.ban_reason,
+    bannedUntil: row.banned_until,
+    failedLoginCount: Number(row.failed_login_count ?? 0),
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
     lastIp: row.last_ip,
@@ -101,6 +109,8 @@ adminRouter.get("/users", async (req, res) => {
     is_banned: boolean;
     is_active: boolean;
     ban_reason: string | null;
+    banned_until: string | null;
+    failed_login_count: number;
     created_at: string;
     last_login_at: string | null;
     last_ip: string | null;
@@ -108,14 +118,14 @@ adminRouter.get("/users", async (req, res) => {
   }>(
     search
       ? `
-          SELECT id, username, role, is_banned, is_active, ban_reason, created_at, last_login_at, last_ip, device_info
+          SELECT id, username, role, is_banned, is_active, ban_reason, banned_until, failed_login_count, created_at, last_login_at, last_ip, device_info
           FROM users
           WHERE username LIKE $1
           ORDER BY created_at DESC
           LIMIT 300
         `
       : `
-          SELECT id, username, role, is_banned, is_active, ban_reason, created_at, last_login_at, last_ip, device_info
+          SELECT id, username, role, is_banned, is_active, ban_reason, banned_until, failed_login_count, created_at, last_login_at, last_ip, device_info
           FROM users
           ORDER BY created_at DESC
           LIMIT 300
@@ -265,13 +275,15 @@ adminRouter.get("/users/:id", async (req, res) => {
     is_banned: boolean;
     is_active: boolean;
     ban_reason: string | null;
+    banned_until: string | null;
+    failed_login_count: number;
     created_at: string;
     last_login_at: string | null;
     last_ip: string | null;
     device_info: string | null;
   }>(
     `
-      SELECT id, username, role, is_banned, is_active, ban_reason, created_at, last_login_at, last_ip, device_info
+      SELECT id, username, role, is_banned, is_active, ban_reason, banned_until, failed_login_count, created_at, last_login_at, last_ip, device_info
       FROM users
       WHERE id = $1
       LIMIT 1
@@ -311,6 +323,51 @@ adminRouter.get("/users/:id", async (req, res) => {
     `,
     [parsed.data.id]
   );
+  const attempts = await query<{
+    id: string;
+    username: string;
+    ip_address: string | null;
+    device_info: string | null;
+    success: boolean;
+    fail_reason: string | null;
+    created_at: string;
+  }>(
+    `
+      SELECT id, username, ip_address, device_info, success, fail_reason, created_at
+      FROM login_attempts
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `,
+    [parsed.data.id]
+  );
+  const devices = await query<{
+    id: string;
+    device_fingerprint: string;
+    device_info: string | null;
+    first_seen_at: string;
+    last_seen_at: string;
+    last_ip: string | null;
+  }>(
+    `
+      SELECT id, device_fingerprint, device_info, first_seen_at, last_seen_at, last_ip
+      FROM user_devices
+      WHERE user_id = $1
+      ORDER BY last_seen_at DESC
+      LIMIT 50
+    `,
+    [parsed.data.id]
+  );
+  const notes = await query<{ id: string; admin_user_id: string | null; note: string; created_at: string }>(
+    `
+      SELECT id, admin_user_id, note, created_at
+      FROM user_admin_notes
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `,
+    [parsed.data.id]
+  );
 
   res.json({
     user: toUserDetail(userRows[0]),
@@ -322,6 +379,29 @@ adminRouter.get("/users/:id", async (req, res) => {
       expiresAt: item.expires_at,
       revokedAt: item.revoked_at
     })),
+    loginAttempts: attempts.map((item) => ({
+      id: item.id,
+      username: item.username,
+      ipAddress: item.ip_address,
+      deviceInfo: item.device_info,
+      success: item.success,
+      failReason: item.fail_reason,
+      createdAt: item.created_at
+    })),
+    devices: devices.map((item) => ({
+      id: item.id,
+      fingerprint: item.device_fingerprint,
+      deviceInfo: item.device_info,
+      firstSeenAt: item.first_seen_at,
+      lastSeenAt: item.last_seen_at,
+      lastIp: item.last_ip
+    })),
+    adminNotes: notes.map((item) => ({
+      id: item.id,
+      adminUserId: item.admin_user_id,
+      note: item.note,
+      createdAt: item.created_at
+    })),
     payroll: payrollRows[0]
       ? {
           data: payrollRows[0].data_json,
@@ -329,6 +409,26 @@ adminRouter.get("/users/:id", async (req, res) => {
         }
       : null
   });
+});
+
+adminRouter.post("/users/:id/notes", async (req, res) => {
+  const idParsed = userIdParamSchema.safeParse(req.params);
+  const bodyParsed = adminNoteSchema.safeParse(req.body);
+  if (!idParsed.success || !bodyParsed.success) {
+    res.status(400).json({ error: "Not bilgisi geçersiz." });
+    return;
+  }
+  await query(
+    `INSERT INTO user_admin_notes (user_id, admin_user_id, note) VALUES ($1, $2, $3)`,
+    [idParsed.data.id, req.auth?.userId ?? null, bodyParsed.data.note]
+  );
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "USER_ADMIN_NOTE_CREATE",
+    targetUserId: idParsed.data.id,
+    ipAddress: req.clientIpAddress
+  });
+  res.status(201).json({ success: true });
 });
 
 adminRouter.post("/users/:id/ban", async (req, res) => {
@@ -339,14 +439,20 @@ adminRouter.post("/users/:id/ban", async (req, res) => {
     return;
   }
 
+  const bannedUntil = bodyParsed.data.durationHours
+    ? new Date(Date.now() + bodyParsed.data.durationHours * 60 * 60 * 1000).toISOString()
+    : null;
+
   await query(
     `
       UPDATE users
       SET is_banned = TRUE,
-          ban_reason = $2
+          ban_reason = $2,
+          banned_until = $3,
+          updated_at = NOW()
       WHERE id = $1
     `,
-    [idParsed.data.id, bodyParsed.data.reason]
+    [idParsed.data.id, bodyParsed.data.reason, bannedUntil]
   );
   await query(`UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, [idParsed.data.id]);
 
@@ -355,7 +461,7 @@ adminRouter.post("/users/:id/ban", async (req, res) => {
     action: "USER_BAN",
     targetUserId: idParsed.data.id,
     ipAddress: req.clientIpAddress,
-    details: { reason: bodyParsed.data.reason }
+    details: { reason: bodyParsed.data.reason, bannedUntil }
   });
 
   res.json({ success: true });
@@ -372,7 +478,9 @@ adminRouter.post("/users/:id/unban", async (req, res) => {
     `
       UPDATE users
       SET is_banned = FALSE,
-          ban_reason = NULL
+          ban_reason = NULL,
+          banned_until = NULL,
+          updated_at = NOW()
       WHERE id = $1
     `,
     [idParsed.data.id]
