@@ -83,6 +83,7 @@ import {
   adminRemoveIpBan,
   adminRevokeUserSessions,
   adminUnbanUser,
+  APP_VERSION,
   getAppUpdateInfo,
   getApiBaseUrl,
   pingBackend,
@@ -98,6 +99,7 @@ import {
   sendSecuritySignal,
   testBackendHealth
 } from "./src/api";
+import type { AppUpdateInfo } from "./src/api";
 import {
   AppData,
   AuthUser,
@@ -647,6 +649,8 @@ function AppContent() {
 
   const [activeTab, setActiveTab] = useState<Tab>("CALENDAR");
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [latestUpdateInfo, setLatestUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
   const [monthKey, setMonthKey] = useState(currentMonthKey());
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
@@ -808,6 +812,7 @@ function AppContent() {
         if (!update || !update.apkUrl) {
           return;
         }
+        setLatestUpdateInfo(update);
         Alert.alert(
           update.required ? "Zorunlu güncelleme var" : "Yeni güncelleme var",
           `${update.version ? `Sürüm: ${update.version}\n` : ""}${update.message || "Yeni APK dosyası hazır."}`,
@@ -2174,6 +2179,52 @@ function AppContent() {
     setActiveTab(tab);
     setDrawerVisible(false);
   };
+  const openUpdateLink = (update: AppUpdateInfo) => {
+    if (!update.apkUrl) {
+      Alert.alert("Güncelleme", "Paylaşılmış APK bağlantısı bulunamadı.");
+      return;
+    }
+    const url = update.apkUrl.startsWith("http") ? update.apkUrl : `${getApiBaseUrl()}${update.apkUrl}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Güncelleme", "APK bağlantısı açılamadı.");
+    });
+  };
+  const checkForAppUpdate = async (showNoUpdate = true) => {
+    setUpdateChecking(true);
+    try {
+      const update = await getAppUpdateInfo();
+      setLatestUpdateInfo(update);
+      if (update?.apkUrl) {
+        Alert.alert(
+          update.required ? "Zorunlu güncelleme var" : "Güncelleme hazır",
+          `${update.version ? `Sürüm: ${update.version}\n` : ""}${update.message || "Yeni APK dosyası hazır."}`,
+          [
+            { text: "Kapat", style: "cancel" },
+            { text: "APK Aç", onPress: () => openUpdateLink(update) }
+          ]
+        );
+        return;
+      }
+      if (showNoUpdate) {
+        Alert.alert("Güncelleme", `Kullanımdaki sürüm güncel görünüyor: ${APP_VERSION}`);
+      }
+    } catch {
+      Alert.alert("Güncelleme", "Güncelleme bilgisi alınamadı. Bağlantıyı kontrol edip tekrar deneyin.");
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+  const drawerItems: Array<{ tab: Tab; label: string; detail: string; adminOnly?: boolean }> = [
+    { tab: "CALENDAR", label: "Takvim", detail: `${monthLabelTr(monthKey)} puantaj` },
+    { tab: "SUMMARY", label: "Özet", detail: `${formatSignedCurrency(summary.difference)} fark` },
+    { tab: "EMPLOYEE", label: "Personel Portalı", detail: `${unreadEmployeeNotifications} bildirim` },
+    { tab: "SETTINGS", label: "Maaş ve Hesap", detail: `${formatCurrency(summary.hourlyRate)} / saat` },
+    { tab: "SYNC", label: "Senkronizasyon", detail: backendConnected ? "Render bağlı" : "Bağlantı kontrol et" },
+    { tab: "LEGAL", label: "Hukuk", detail: "Kıdem, ihbar, izin" },
+    { tab: "USERS", label: "Kullanıcılar", detail: "Admin panel", adminOnly: true },
+    { tab: "APP_SETTINGS", label: "Ayarlar", detail: `v${APP_VERSION}` },
+    { tab: "SUPPORT", label: "Destek", detail: "E-posta ve kayıt" }
+  ];
   const openSupportContact = async () => {
     const email = "yusufavsarsgu@gmail.com";
     const subject = encodeURIComponent(supportSubject.trim() || "Destek Talebi");
@@ -4933,43 +4984,72 @@ return (
       <Modal visible={drawerVisible} transparent animationType="slide" onRequestClose={closeDrawer}>
         <Pressable style={styles.drawerOverlay} onPress={closeDrawer}>
           <Pressable style={styles.drawerPanel} onPress={() => {}}>
-            <Text style={styles.drawerBrand}>AYFSOFT</Text>
-            <Text style={styles.drawerSub}>{MARKA_METNI}</Text>
+            <View style={styles.drawerHeaderCard}>
+              <View style={styles.drawerBrandRow}>
+                <Image source={APP_LOGO} style={styles.drawerLogo} resizeMode="contain" />
+                <View style={styles.drawerBrandTextBlock}>
+                  <Text style={styles.drawerBrand}>AYFSOFT</Text>
+                  <Text style={styles.drawerSub}>Puantaj Maaş Hesap</Text>
+                </View>
+              </View>
+              <Text style={styles.drawerUserText} numberOfLines={1}>
+                {authUser.role === "ADMIN" ? "Yönetici" : "Kullanıcı"}: {authUser.username}
+              </Text>
+              <View style={styles.drawerStatusRow}>
+                <View style={[styles.drawerStatusDot, backendConnected ? styles.drawerStatusDotOk : styles.drawerStatusDotWarn]} />
+                <Text style={styles.drawerStatusText}>{backendConnected ? "Render bağlı" : "Çevrimdışı/kısmi mod"}</Text>
+                <Text style={styles.drawerVersionText}>v{APP_VERSION}</Text>
+              </View>
+            </View>
 
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("CALENDAR")}>
-              <Text style={styles.drawerItemText}>Takvim</Text>
-            </Pressable>
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SUMMARY")}>
-              <Text style={styles.drawerItemText}>Özet</Text>
-            </Pressable>
+            <View style={styles.drawerMetricRow}>
+              <View style={styles.drawerMetric}>
+                <Text style={styles.drawerMetricValue}>{summary.totalHours}</Text>
+                <Text style={styles.drawerMetricLabel}>Saat</Text>
+              </View>
+              <View style={styles.drawerMetric}>
+                <Text style={styles.drawerMetricValue}>{formatCurrency(summary.expectedTotal)}</Text>
+                <Text style={styles.drawerMetricLabel}>Hak ediş</Text>
+              </View>
+            </View>
 
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("EMPLOYEE")}>
-              <Text style={styles.drawerItemText}>Personel Portalı</Text>
-            </Pressable>
+            <ScrollView style={styles.drawerScroll} contentContainerStyle={styles.drawerScrollContent}>
+              {drawerItems
+                .filter((item) => !item.adminOnly || authUser.role === "ADMIN")
+                .map((item) => {
+                  const active = activeTab === item.tab;
+                  return (
+                    <Pressable
+                      key={item.tab}
+                      style={[styles.drawerItem, active ? styles.drawerItemActive : null]}
+                      onPress={() => selectDrawerTab(item.tab)}
+                    >
+                      <View style={styles.drawerItemTextBlock}>
+                        <Text style={[styles.drawerItemText, active ? styles.drawerItemTextActive : null]}>{item.label}</Text>
+                        <Text style={styles.drawerItemDetail} numberOfLines={1}>{item.detail}</Text>
+                      </View>
+                      <Text style={[styles.drawerItemArrow, active ? styles.drawerItemTextActive : null]}>{active ? "•" : "›"}</Text>
+                    </Pressable>
+                  );
+                })}
 
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SETTINGS")}>
-              <Text style={styles.drawerItemText}>Maaş ve Hesap</Text>
-            </Pressable>
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SYNC")}>
-              <Text style={styles.drawerItemText}>Senkronizasyon</Text>
-            </Pressable>
-
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("LEGAL")}>
-              <Text style={styles.drawerItemText}>Hukuk</Text>
-            </Pressable>
-
-            {authUser.role === "ADMIN" ? (
-              <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("USERS")}>
-                <Text style={styles.drawerItemText}>Kullanıcılar</Text>
+              <Pressable
+                style={[styles.drawerItem, latestUpdateInfo?.apkUrl ? styles.drawerUpdateItem : null]}
+                onPress={() => {
+                  closeDrawer();
+                  void checkForAppUpdate(true);
+                }}
+                disabled={updateChecking}
+              >
+                <View style={styles.drawerItemTextBlock}>
+                  <Text style={styles.drawerItemText}>{updateChecking ? "Kontrol ediliyor..." : "Güncellemeyi Kontrol Et"}</Text>
+                  <Text style={styles.drawerItemDetail} numberOfLines={1}>
+                    {latestUpdateInfo?.apkUrl ? `Yeni sürüm: ${latestUpdateInfo.version || "hazır"}` : `Mevcut sürüm: ${APP_VERSION}`}
+                  </Text>
+                </View>
+                <Text style={styles.drawerItemArrow}>↗</Text>
               </Pressable>
-            ) : null}
-
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("APP_SETTINGS")}>
-              <Text style={styles.drawerItemText}>Ayarlar</Text>
-            </Pressable>
-            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SUPPORT")}>
-              <Text style={styles.drawerItemText}>Destek</Text>
-            </Pressable>
+            </ScrollView>
 
             <Pressable
               style={[styles.drawerItem, styles.drawerExitItem]}
@@ -5973,15 +6053,37 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start"
   },
   drawerPanel: {
-    width: "82%",
-    maxWidth: 340,
+    width: "88%",
+    maxWidth: 380,
     minHeight: "100%",
     backgroundColor: "#0b1220",
     borderRightWidth: 1,
     borderRightColor: "#1f2937",
-    paddingTop: (NativeStatusBar.currentHeight ?? 0) + 16,
+    paddingTop: (NativeStatusBar.currentHeight ?? 0) + 12,
     paddingHorizontal: 14,
-    paddingBottom: 24
+    paddingBottom: 18
+  },
+  drawerHeaderCard: {
+    borderWidth: 1,
+    borderColor: "#1f3b46",
+    borderRadius: 14,
+    backgroundColor: "#08151f",
+    padding: 12,
+    gap: 8
+  },
+  drawerBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  drawerLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#0f172a"
+  },
+  drawerBrandTextBlock: {
+    flex: 1
   },
   drawerBrand: {
     color: "#f8fafc",
@@ -5989,10 +6091,73 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   drawerSub: {
-    marginTop: 4,
+    marginTop: 2,
+    color: "#67e8f9",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  drawerUserText: {
+    color: "#cbd5e1",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  drawerStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7
+  },
+  drawerStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4
+  },
+  drawerStatusDotOk: {
+    backgroundColor: "#22c55e"
+  },
+  drawerStatusDotWarn: {
+    backgroundColor: "#f59e0b"
+  },
+  drawerStatusText: {
+    flex: 1,
     color: "#94a3b8",
     fontSize: 11,
-    lineHeight: 16
+    fontWeight: "700"
+  },
+  drawerVersionText: {
+    color: "#e2e8f0",
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  drawerMetricRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10
+  },
+  drawerMetric: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 12,
+    backgroundColor: "#111827",
+    padding: 10
+  },
+  drawerMetricValue: {
+    color: "#f8fafc",
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  drawerMetricLabel: {
+    marginTop: 2,
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  drawerScroll: {
+    marginTop: 8,
+    maxHeight: "68%"
+  },
+  drawerScrollContent: {
+    paddingBottom: 6
   },
   drawerItem: {
     marginTop: 8,
@@ -6000,16 +6165,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1f2937",
     backgroundColor: "#111827",
-    paddingVertical: 10,
-    paddingHorizontal: 10
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8
+  },
+  drawerItemActive: {
+    borderColor: "#14b8a6",
+    backgroundColor: "#0b3f3a"
+  },
+  drawerItemTextBlock: {
+    flex: 1
   },
   drawerItemText: {
     color: "#e2e8f0",
     fontSize: 14,
     fontWeight: "700"
   },
+  drawerItemTextActive: {
+    color: "#ffffff"
+  },
+  drawerItemDetail: {
+    marginTop: 2,
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  drawerItemArrow: {
+    color: "#94a3b8",
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  drawerUpdateItem: {
+    borderColor: "#0f766e",
+    backgroundColor: "#052e2b"
+  },
   drawerExitItem: {
-    marginTop: 18,
+    marginTop: 10,
     borderColor: "#7f1d1d",
     backgroundColor: "#3f0d0d"
   },
