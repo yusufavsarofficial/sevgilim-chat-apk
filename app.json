@@ -2,7 +2,7 @@
   "expo": {
     "name": "Puantaj Maaş Hesap",
     "slug": "puantaj-maas-apk",
-    "version": "1.0.2",
+    "version": "1.14",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.yusuf.puantajmaashesap",
-      "versionCode": 11,
+      "versionCode": 14,
       "permissions": [
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"

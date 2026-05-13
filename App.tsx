@@ -2215,8 +2215,12 @@ function AppContent() {
     }
   };
   const drawerItems: Array<{ tab: Tab; label: string; detail: string; adminOnly?: boolean }> = [
-    { tab: "CALENDAR", label: "Takvim", detail: `${monthLabelTr(monthKey)} puantaj` },
-    { tab: "SUMMARY", label: "Özet", detail: `${formatSignedCurrency(summary.difference)} fark` },
+    {
+      tab: "CALENDAR",
+      label: "Takvim",
+      detail: currentMonthMissingDays.length === 0 ? `${monthLabelTr(monthKey)} hazır` : `${currentMonthMissingDays.length} eksik gün`
+    },
+    { tab: "SUMMARY", label: "Özet", detail: `${formatSignedCurrency(summary.difference)} ödeme farkı` },
     { tab: "EMPLOYEE", label: "Personel Portalı", detail: `${unreadEmployeeNotifications} bildirim` },
     { tab: "SETTINGS", label: "Maaş ve Hesap", detail: `${formatCurrency(summary.hourlyRate)} / saat` },
     { tab: "SYNC", label: "Senkronizasyon", detail: backendConnected ? "Render bağlı" : "Bağlantı kontrol et" },
@@ -5013,6 +5017,17 @@ return (
               </View>
             </View>
 
+            <View style={styles.drawerInsightCard}>
+              <Text style={styles.drawerInsightTitle}>
+                {currentMonthMissingDays.length === 0 ? "Puantaj tamam" : `${currentMonthMissingDays.length} eksik gün var`}
+              </Text>
+              <Text style={styles.drawerInsightText}>
+                {summary.difference === 0
+                  ? "Ödeme farkı yok. Bu ay dengede görünüyor."
+                  : `${monthlyDifferenceLabel(summary.difference)}: ${formatSignedCurrency(summary.difference)}`}
+              </Text>
+            </View>
+
             <ScrollView style={styles.drawerScroll} contentContainerStyle={styles.drawerScrollContent}>
               {drawerItems
                 .filter((item) => !item.adminOnly || authUser.role === "ADMIN")
@@ -6150,6 +6165,26 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: "#94a3b8",
     fontSize: 11,
+    fontWeight: "700"
+  },
+  drawerInsightCard: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#1f3b46",
+    borderRadius: 12,
+    backgroundColor: "#071923",
+    paddingHorizontal: 10,
+    paddingVertical: 9
+  },
+  drawerInsightTitle: {
+    color: "#f8fafc",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  drawerInsightText: {
+    marginTop: 3,
+    color: "#a5f3fc",
+    fontSize: 12,
     fontWeight: "700"
   },
   drawerScroll: {

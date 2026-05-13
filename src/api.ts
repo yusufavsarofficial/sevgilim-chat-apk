@@ -14,7 +14,7 @@ const DEFAULT_TIMEOUT_MS = 12000;
 const HEALTH_TIMEOUT_MS = 7000;
 
 const GENERIC_ERROR = "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
-export const APP_VERSION = "1.0.2";
+export const APP_VERSION = "1.14";
 
 type RemoteUser = {
   id: string;
