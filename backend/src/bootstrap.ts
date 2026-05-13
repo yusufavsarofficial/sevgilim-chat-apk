@@ -5,7 +5,7 @@ import { normalizeUsername } from "./utils/security.js";
 
 export async function ensureAdminUser(): Promise<void> {
   const username = normalizeUsername(config.ADMIN_USERNAME);
-  const passwordHash = config.ADMIN_PASSWORD_HASH.toLowerCase();
+  const passwordHash = config.ADMIN_PASSWORD_HASH;
 
   const existing = await query<{ id: string }>(
     `SELECT id FROM users WHERE username = $1 LIMIT 1`,

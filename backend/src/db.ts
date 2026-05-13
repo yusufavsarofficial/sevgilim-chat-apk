@@ -146,6 +146,19 @@ export async function ensureDatabaseSchema(): Promise<void> {
     )
   `);
   await query(`
+    CREATE TABLE IF NOT EXISTS registration_invite_keys (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      key_hash TEXT NOT NULL UNIQUE,
+      label TEXT,
+      assigned_to TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      used_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ
+    )
+  `);
+  await query(`
     CREATE TABLE IF NOT EXISTS admin_settings (
       key TEXT PRIMARY KEY,
       value_json JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -258,6 +271,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts(created_at DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_user_devices_user_id ON user_devices(user_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_registration_invite_keys_status ON registration_invite_keys(is_active, used_at, expires_at)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_registration_invite_keys_created_at ON registration_invite_keys(created_at DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_course_lessons_course_id ON course_lessons(course_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_courses_published ON courses(is_published)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_license_keys_active ON license_keys(active)`);

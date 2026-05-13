@@ -5,7 +5,12 @@ services:
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm run start
+    healthCheckPath: /api/health
     autoDeploy: true
+    disk:
+      name: uploads
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: 22
@@ -29,3 +34,5 @@ services:
         value: 3000
       - key: CORS_ORIGIN
         value: https://puantaj-maas-backend.onrender.com,http://localhost:8081,http://localhost:19006
+      - key: UPLOADS_DIR
+        value: /var/data/uploads

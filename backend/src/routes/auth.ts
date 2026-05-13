@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
 import { config } from "../config.js";
-import { query } from "../db.js";
+import { pool, query } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createAuditLog } from "../utils/audit.js";
 import { hashToken, normalizeUsername, parseDurationToMs } from "../utils/security.js";
@@ -66,6 +66,15 @@ type UserRow = {
   security_answer_hash: string | null;
 };
 
+type RouteError = Error & { statusCode?: number };
+
+type InviteKeyRow = {
+  id: string;
+  is_active: boolean;
+  used_at: string | null;
+  expires_at: string | null;
+};
+
 const accessLifetimeMs = parseDurationToMs(config.JWT_EXPIRES_IN, 15 * 60 * 1000);
 const refreshLifetimeMs = parseDurationToMs(config.REFRESH_TOKEN_EXPIRES_IN, 30 * 24 * 60 * 60 * 1000);
 
@@ -97,6 +106,12 @@ function isBanActive(user: Pick<UserRow, "is_banned" | "banned_until">): boolean
     return true;
   }
   return new Date(user.banned_until).getTime() > Date.now();
+}
+
+function routeError(statusCode: number, message: string): RouteError {
+  const error = new Error(message) as RouteError;
+  error.statusCode = statusCode;
+  return error;
 }
 
 async function createSessionTokens(input: {
@@ -211,41 +226,100 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
 
-  if (hashToken(parsed.data.inviteKey.trim()) !== config.REGISTER_INVITE_KEY_HASH.toLowerCase()) {
-    res.status(403).json({ error: "Kayıt anahtarı geçersiz." });
-    return;
-  }
-
   if (!hasRequiredConsents(parsed.data.consents)) {
     res.status(400).json({ error: "Zorunlu onaylar tamamlanmadan kayıt yapılamaz." });
     return;
   }
 
   const username = normalizeUsername(parsed.data.username);
-  const existing = await query<{ id: string }>(`SELECT id FROM users WHERE username = $1 LIMIT 1`, [username]);
-  if (existing.length > 0) {
-    res.status(409).json({ error: "Bu kullanıcı adı zaten kayıtlı." });
-    return;
-  }
+  const inviteKeyHash = hashToken(parsed.data.inviteKey.trim());
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  const inserted = await query<{ id: string; username: string; role: "ADMIN" | "USER" }>(
-    `
-      INSERT INTO users (username, password_hash, role, is_active, is_banned)
-      VALUES ($1, $2, 'USER', TRUE, FALSE)
-      RETURNING id, username, role
-    `,
-    [username, passwordHash]
-  );
-  const user = inserted[0];
-  await query(
-    `UPDATE users SET security_question = $2, security_answer_hash = $3 WHERE id = $1`,
-    [
-      user.id,
-      parsed.data.securityQuestion.trim(),
-      await bcrypt.hash(parsed.data.securityAnswer.trim().toLowerCase(), 10)
-    ]
-  );
+  const securityAnswerHash = await bcrypt.hash(parsed.data.securityAnswer.trim().toLowerCase(), 10);
+  const client = await pool.connect();
+  let user!: { id: string; username: string; role: "ADMIN" | "USER" };
+
+  try {
+    await client.query("BEGIN");
+
+    const inviteRows = await client.query<InviteKeyRow>(
+      `
+        SELECT id, is_active, used_at, expires_at
+        FROM registration_invite_keys
+        WHERE key_hash = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [inviteKeyHash]
+    );
+    const invite = inviteRows.rows[0] ?? null;
+    const fallbackAllowed = !invite && config.REGISTER_INVITE_KEY_HASH?.toLowerCase() === inviteKeyHash;
+
+    if (!invite && !fallbackAllowed) {
+      throw routeError(403, "Kayıt anahtarı geçersiz.");
+    }
+    if (invite && !invite.is_active) {
+      throw routeError(403, "Kayıt anahtarı pasif.");
+    }
+    if (invite?.used_at) {
+      throw routeError(409, "Kayıt anahtarı daha önce kullanılmış.");
+    }
+    if (invite?.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+      throw routeError(403, "Kayıt anahtarının süresi dolmuş.");
+    }
+
+    const existing = await client.query<{ id: string }>(`SELECT id FROM users WHERE username = $1 LIMIT 1`, [username]);
+    if (existing.rows.length > 0) {
+      throw routeError(409, "Bu kullanıcı adı zaten kayıtlı.");
+    }
+
+    const inserted = await client.query<{ id: string; username: string; role: "ADMIN" | "USER" }>(
+      `
+        INSERT INTO users (
+          username,
+          password_hash,
+          role,
+          is_active,
+          is_banned,
+          security_question,
+          security_answer_hash
+        )
+        VALUES ($1, $2, 'USER', TRUE, FALSE, $3, $4)
+        RETURNING id, username, role
+      `,
+      [username, passwordHash, parsed.data.securityQuestion.trim(), securityAnswerHash]
+    );
+    user = inserted.rows[0];
+
+    if (invite) {
+      const updatedInvite = await client.query<{ id: string }>(
+        `
+          UPDATE registration_invite_keys
+          SET used_by = $2,
+              used_at = NOW()
+          WHERE id = $1
+            AND used_at IS NULL
+          RETURNING id
+        `,
+        [invite.id, user.id]
+      );
+      if (updatedInvite.rows.length === 0) {
+        throw routeError(409, "Kayıt anahtarı daha önce kullanılmış.");
+      }
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    const typedError = error as RouteError;
+    res.status(typedError.statusCode ?? 500).json({
+      error: typedError.statusCode ? typedError.message : "İşlem tamamlanamadı. Lütfen tekrar deneyin."
+    });
+    return;
+  } finally {
+    client.release();
+  }
+
   const session = await createSessionTokens({
     userId: user.id,
     username: user.username,

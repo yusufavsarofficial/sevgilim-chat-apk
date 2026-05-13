@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS user_devices (
   UNIQUE (user_id, device_fingerprint)
 );
 
+CREATE TABLE IF NOT EXISTS registration_invite_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key_hash TEXT NOT NULL UNIQUE,
+  label TEXT,
+  assigned_to TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  used_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS admin_settings (
   key TEXT PRIMARY KEY,
   value_json JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -131,6 +143,8 @@ CREATE INDEX IF NOT EXISTS idx_ip_bans_ip_address ON ip_bans(ip_address);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
 CREATE INDEX IF NOT EXISTS idx_user_devices_user_id ON user_devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_registration_invite_keys_status ON registration_invite_keys(is_active, used_at, expires_at);
+CREATE INDEX IF NOT EXISTS idx_registration_invite_keys_created_at ON registration_invite_keys(created_at DESC);
 
 -- === Content / Courses ===
 CREATE TABLE IF NOT EXISTS courses (

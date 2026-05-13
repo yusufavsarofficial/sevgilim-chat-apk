@@ -9,8 +9,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("15m"),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default("30d"),
   ADMIN_USERNAME: z.string().min(3),
-  ADMIN_PASSWORD_HASH: z.string().regex(/^\$2[aby]\$\d{2}\$.{53}$/),
-  REGISTER_INVITE_KEY_HASH: z.string().regex(/^[a-f0-9]{64}$/i),
+  ADMIN_PASSWORD_HASH: z.string().startsWith("$2").min(50),
+  REGISTER_INVITE_KEY_HASH: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
   PG_SSL_REJECT_UNAUTHORIZED: z.preprocess(
     (value) => {
       if (typeof value === "string") {
@@ -24,7 +24,8 @@ const envSchema = z.object({
   ),
   PORT: z.coerce.number().int().positive().default(3000),
   CORS_ORIGIN: z.string().default("http://localhost:8081,http://localhost:19006"),
-  API_BASE_URL: z.string().optional()
+  API_BASE_URL: z.string().optional(),
+  UPLOADS_DIR: z.string().optional()
 });
 
 const parsed = envSchema.safeParse(process.env);

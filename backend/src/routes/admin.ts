@@ -1,12 +1,14 @@
 ﻿import bcrypt from "bcryptjs";
 import { Router } from "express";
+import crypto from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { config } from "../config.js";
 import { query } from "../db.js";
 import { createAuditLog } from "../utils/audit.js";
-import { normalizeUsername } from "../utils/security.js";
+import { hashToken, normalizeUsername } from "../utils/security.js";
 
 const userIdParamSchema = z.object({ id: z.string().uuid() });
 const banSchema = z.object({
@@ -38,15 +40,43 @@ const apkUploadSchema = z.object({
   message: z.string().max(1000).optional().default(""),
   required: z.boolean().optional().default(false)
 });
+const inviteGenerateSchema = z.object({
+  count: z.number().int().min(1).max(500).default(1),
+  label: z.string().max(120).optional().default(""),
+  assignedTo: z.string().max(120).optional().default(""),
+  expiresAt: z.string().datetime().nullable().optional()
+});
+const inviteImportSchema = z.object({
+  keys: z.array(z.string().min(8).max(120)).min(1).max(1000),
+  label: z.string().max(120).optional().default(""),
+  assignedTo: z.string().max(120).optional().default(""),
+  expiresAt: z.string().datetime().nullable().optional()
+});
+const inviteIdParamSchema = z.object({ id: z.string().uuid() });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsDir = path.resolve(__dirname, "../../../uploads");
+const uploadsDir = config.UPLOADS_DIR
+  ? path.resolve(config.UPLOADS_DIR)
+  : path.resolve(__dirname, "../../../uploads");
 
 function sanitizeApkFileName(fileName: string): string {
   const base = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "-");
   const withExtension = base.toLowerCase().endsWith(".apk") ? base : `${base}.apk`;
   return `${Date.now()}-${withExtension}`;
+}
+
+function generateInviteKey(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const parts = Array.from({ length: 4 }, () =>
+    Array.from({ length: 4 }, () => alphabet[crypto.randomInt(alphabet.length)]).join("")
+  );
+  return `AYF-${parts.join("-")}`;
+}
+
+function normalizeOptionalText(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
 }
 
 async function saveAppUpdateSettings(value: {
@@ -98,6 +128,169 @@ function toUserDetail(row: {
 }
 
 export const adminRouter = Router();
+
+adminRouter.get("/invite-keys", async (_req, res) => {
+  const rows = await query<{
+    id: string;
+    label: string | null;
+    assigned_to: string | null;
+    is_active: boolean;
+    used_by: string | null;
+    used_username: string | null;
+    used_at: string | null;
+    created_at: string;
+    expires_at: string | null;
+  }>(
+    `
+      SELECT
+        rik.id,
+        rik.label,
+        rik.assigned_to,
+        rik.is_active,
+        rik.used_by,
+        u.username AS used_username,
+        rik.used_at,
+        rik.created_at,
+        rik.expires_at
+      FROM registration_invite_keys rik
+      LEFT JOIN users u ON u.id = rik.used_by
+      ORDER BY rik.created_at DESC
+      LIMIT 500
+    `
+  );
+
+  res.json({
+    items: rows.map((item) => ({
+      id: item.id,
+      label: item.label,
+      assignedTo: item.assigned_to,
+      isActive: item.is_active,
+      usedBy: item.used_by,
+      usedByUsername: item.used_username,
+      usedAt: item.used_at,
+      createdAt: item.created_at,
+      expiresAt: item.expires_at
+    }))
+  });
+});
+
+adminRouter.post("/invite-keys/generate", async (req, res) => {
+  const parsed = inviteGenerateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Davet key bilgileri geçersiz." });
+    return;
+  }
+
+  const label = normalizeOptionalText(parsed.data.label);
+  const assignedTo = normalizeOptionalText(parsed.data.assignedTo);
+  const expiresAt = parsed.data.expiresAt ?? null;
+  const created: Array<{ id: string; key: string; label: string | null; assignedTo: string | null; expiresAt: string | null }> = [];
+
+  for (let index = 0; index < parsed.data.count; index += 1) {
+    let inserted = false;
+    for (let attempt = 0; attempt < 5 && !inserted; attempt += 1) {
+      const key = generateInviteKey();
+      const rows = await query<{ id: string }>(
+        `
+          INSERT INTO registration_invite_keys (key_hash, label, assigned_to, expires_at)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (key_hash) DO NOTHING
+          RETURNING id
+        `,
+        [hashToken(key), label, assignedTo, expiresAt]
+      );
+      if (rows.length > 0) {
+        created.push({ id: rows[0].id, key, label, assignedTo, expiresAt });
+        inserted = true;
+      }
+    }
+    if (!inserted) {
+      res.status(500).json({ error: "Davet key oluşturulamadı. Lütfen tekrar deneyin." });
+      return;
+    }
+  }
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "REGISTRATION_INVITE_KEYS_GENERATE",
+    ipAddress: req.clientIpAddress,
+    details: { count: created.length, label, assignedTo, expiresAt }
+  });
+
+  res.status(201).json({ items: created });
+});
+
+adminRouter.post("/invite-keys/import", async (req, res) => {
+  const parsed = inviteImportSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Davet key listesi geçersiz." });
+    return;
+  }
+
+  const keys = Array.from(new Set(parsed.data.keys.map((item) => item.trim()).filter(Boolean)));
+  const label = normalizeOptionalText(parsed.data.label);
+  const assignedTo = normalizeOptionalText(parsed.data.assignedTo);
+  const expiresAt = parsed.data.expiresAt ?? null;
+  let createdCount = 0;
+  let duplicateCount = 0;
+
+  for (const key of keys) {
+    const rows = await query<{ id: string }>(
+      `
+        INSERT INTO registration_invite_keys (key_hash, label, assigned_to, expires_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (key_hash) DO NOTHING
+        RETURNING id
+      `,
+      [hashToken(key), label, assignedTo, expiresAt]
+    );
+    if (rows.length > 0) {
+      createdCount += 1;
+    } else {
+      duplicateCount += 1;
+    }
+  }
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "REGISTRATION_INVITE_KEYS_IMPORT",
+    ipAddress: req.clientIpAddress,
+    details: { createdCount, duplicateCount, label, assignedTo, expiresAt }
+  });
+
+  res.status(201).json({ success: true, createdCount, duplicateCount });
+});
+
+adminRouter.post("/invite-keys/:id/disable", async (req, res) => {
+  const parsed = inviteIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Geçersiz davet key kimliği." });
+    return;
+  }
+
+  const rows = await query<{ id: string }>(
+    `
+      UPDATE registration_invite_keys
+      SET is_active = FALSE
+      WHERE id = $1
+      RETURNING id
+    `,
+    [parsed.data.id]
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "Davet key bulunamadı." });
+    return;
+  }
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "REGISTRATION_INVITE_KEY_DISABLE",
+    ipAddress: req.clientIpAddress,
+    details: { inviteKeyId: parsed.data.id }
+  });
+
+  res.json({ success: true });
+});
 
 adminRouter.get("/app-update", async (_req, res) => {
   const rows = await query<{ value_json: unknown; updated_at: string }>(

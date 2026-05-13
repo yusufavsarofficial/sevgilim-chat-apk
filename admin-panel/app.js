@@ -26,6 +26,77 @@ const updateRequiredInput = document.getElementById("updateRequiredInput");
 const apkFileInput = document.getElementById("apkFileInput");
 const updateStatus = document.getElementById("updateStatus");
 const updateCurrent = document.getElementById("updateCurrent");
+let inviteKeysBody;
+let inviteCountInput;
+let inviteLabelInput;
+let inviteAssignedInput;
+let inviteExpiresInput;
+let inviteImportInput;
+let inviteStatus;
+let inviteGenerated;
+
+function setupInviteKeyPanel() {
+  const anchor = document.querySelector(".danger-zone");
+  if (!anchor || document.getElementById("inviteKeysBody")) return;
+  anchor.insertAdjacentHTML("afterend", `
+    <section class="card">
+      <div class="toolbar">
+        <h3>Davet Key Yonetimi</h3>
+        <button id="refreshInviteKeysBtn">Yenile</button>
+      </div>
+      <div class="update-grid">
+        <div>
+          <label>Adet</label>
+          <input id="inviteCountInput" type="number" min="1" max="500" value="1" />
+          <label>Etiket</label>
+          <input id="inviteLabelInput" placeholder="Orn: Mayis kampanyasi" />
+          <label>Atanan kisi / not</label>
+          <input id="inviteAssignedInput" placeholder="Opsiyonel" />
+          <label>Son kullanma tarihi</label>
+          <input id="inviteExpiresInput" type="datetime-local" />
+          <button id="generateInviteKeysBtn">Key Uret</button>
+        </div>
+        <div>
+          <label>Mevcut keyleri iceri al</label>
+          <textarea id="inviteImportInput" placeholder="Her satira bir key"></textarea>
+          <button id="importInviteKeysBtn">Listeyi Hashleyip Kaydet</button>
+          <p id="inviteStatus" class="status"></p>
+          <div id="inviteGenerated" class="detail-item">Uretilen keyler sadece bu alanda bir kez gosterilir.</div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Etiket</th>
+              <th>Atanan</th>
+              <th>Durum</th>
+              <th>Kullanim</th>
+              <th>Tarih</th>
+              <th>Islem</th>
+            </tr>
+          </thead>
+          <tbody id="inviteKeysBody"></tbody>
+        </table>
+      </div>
+    </section>
+  `);
+  inviteKeysBody = document.getElementById("inviteKeysBody");
+  inviteCountInput = document.getElementById("inviteCountInput");
+  inviteLabelInput = document.getElementById("inviteLabelInput");
+  inviteAssignedInput = document.getElementById("inviteAssignedInput");
+  inviteExpiresInput = document.getElementById("inviteExpiresInput");
+  inviteImportInput = document.getElementById("inviteImportInput");
+  inviteStatus = document.getElementById("inviteStatus");
+  inviteGenerated = document.getElementById("inviteGenerated");
+  document.getElementById("refreshInviteKeysBtn").addEventListener("click", loadInviteKeys);
+  document.getElementById("generateInviteKeysBtn").addEventListener("click", () => {
+    generateInviteKeys().catch((error) => setInviteStatus(error.message || "Key uretilemedi."));
+  });
+  document.getElementById("importInviteKeysBtn").addEventListener("click", () => {
+    importInviteKeys().catch((error) => setInviteStatus(error.message || "Key listesi kaydedilemedi."));
+  });
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -173,6 +244,105 @@ function renderIpBans(items) {
   }
 }
 
+function invitePayload() {
+  const expiresValue = inviteExpiresInput.value
+    ? new Date(inviteExpiresInput.value).toISOString()
+    : null;
+  return {
+    label: inviteLabelInput.value.trim(),
+    assignedTo: inviteAssignedInput.value.trim(),
+    expiresAt: expiresValue
+  };
+}
+
+function setInviteStatus(message, isError = true) {
+  inviteStatus.textContent = message;
+  inviteStatus.style.color = isError ? "#b91c1c" : "#0f766e";
+}
+
+function inviteStatusBadge(item) {
+  if (item.usedAt) return '<span class="badge">Kullanildi</span>';
+  if (!item.isActive) return '<span class="badge warn">Pasif</span>';
+  if (item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now()) {
+    return '<span class="badge danger">Suresi doldu</span>';
+  }
+  return '<span class="badge">Aktif</span>';
+}
+
+function renderInviteKeys(items) {
+  inviteKeysBody.innerHTML = "";
+  for (const item of items) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(item.label || "-")}</td>
+      <td>${escapeHtml(item.assignedTo || "-")}</td>
+      <td>${inviteStatusBadge(item)}</td>
+      <td>${item.usedAt ? `${escapeHtml(item.usedByUsername || item.usedBy || "-")}<br>${formatDate(item.usedAt)}` : "-"}</td>
+      <td>Olusturma: ${formatDate(item.createdAt)}<br><span class="muted">Bitis: ${formatDate(item.expiresAt)}</span></td>
+      <td></td>
+    `;
+    const actionCell = tr.querySelector("td:last-child");
+    if (item.isActive && !item.usedAt) {
+      const disableBtn = document.createElement("button");
+      disableBtn.className = "danger";
+      disableBtn.textContent = "Pasiflestir";
+      disableBtn.addEventListener("click", async () => {
+        await api(`/api/admin/invite-keys/${item.id}/disable`, { method: "POST" });
+        await loadInviteKeys();
+      });
+      actionCell.appendChild(disableBtn);
+    } else {
+      actionCell.textContent = "-";
+    }
+    inviteKeysBody.appendChild(tr);
+  }
+}
+
+async function loadInviteKeys() {
+  const data = await api("/api/admin/invite-keys");
+  renderInviteKeys(data.items || []);
+}
+
+async function generateInviteKeys() {
+  const count = Number(inviteCountInput.value || 1);
+  if (!Number.isInteger(count) || count < 1 || count > 500) {
+    setInviteStatus("Adet 1 ile 500 arasinda olmali.");
+    return;
+  }
+  setInviteStatus("Key uretiliyor...", false);
+  const data = await api("/api/admin/invite-keys/generate", {
+    method: "POST",
+    body: JSON.stringify({ count, ...invitePayload() })
+  });
+  const items = data.items || [];
+  inviteGenerated.innerHTML = `
+    <strong>Yeni uretilen keyler</strong><br>
+    <textarea readonly>${escapeHtml(items.map((item) => item.key).join("\n"))}</textarea>
+  `;
+  setInviteStatus(`${items.length} key uretildi. Bu listeyi kapatmadan once kaydedin.`, false);
+  await loadInviteKeys();
+}
+
+async function importInviteKeys() {
+  const keys = inviteImportInput.value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (keys.length === 0) {
+    setInviteStatus("Iceri alinacak key yok.");
+    return;
+  }
+  setInviteStatus("Keyler hashlenip kaydediliyor...", false);
+  const data = await api("/api/admin/invite-keys/import", {
+    method: "POST",
+    body: JSON.stringify({ keys, ...invitePayload() })
+  });
+  inviteImportInput.value = "";
+  inviteGenerated.textContent = "Iceri alinan keyler guvenlik icin tekrar gosterilmez.";
+  setInviteStatus(`${data.createdCount || 0} key eklendi, ${data.duplicateCount || 0} tekrar atlandi.`, false);
+  await loadInviteKeys();
+}
+
 async function loadStats() {
   const data = await api("/api/admin/stats");
   statTotal.textContent = String(data.totalUsers);
@@ -283,7 +453,8 @@ async function uploadApkFile() {
 }
 
 async function loadDashboard() {
-  await Promise.all([loadStats(), loadUsers(), loadLogs(), loadIpBans(), loadAppUpdate()]);
+  setupInviteKeyPanel();
+  await Promise.all([loadStats(), loadUsers(), loadLogs(), loadIpBans(), loadAppUpdate(), loadInviteKeys()]);
 }
 
 async function openUserDetail(userId) {
@@ -425,6 +596,8 @@ async function doLogout() {
   panel.classList.add("hidden");
   loginCard.classList.remove("hidden");
 }
+
+setupInviteKeyPanel();
 
 document.getElementById("loginBtn").addEventListener("click", doLogin);
 document.getElementById("logoutBtn").addEventListener("click", doLogout);

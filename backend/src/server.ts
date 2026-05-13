@@ -19,7 +19,7 @@ import { ensureSeedCourses } from "./seed/courses.js";
 
 const app = express();
 app.disable("x-powered-by");
-app.set("trust proxy", true);
+app.set("trust proxy", 1);
 
 const limiter = rateLimit({
   windowMs: 10 * 60 * 1000,
@@ -74,7 +74,9 @@ app.get("/health", async (_req, res) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const adminPanelDir = path.resolve(__dirname, "../../admin-panel");
-const uploadsDir = path.resolve(__dirname, "../../uploads");
+const uploadsDir = config.UPLOADS_DIR
+  ? path.resolve(config.UPLOADS_DIR)
+  : path.resolve(__dirname, "../../uploads");
 
 app.use("/admin", express.static(adminPanelDir));
 app.use("/downloads", express.static(uploadsDir));

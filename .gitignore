@@ -30,3 +30,5 @@ local.properties
 backend/.env
 backend/node_modules
 backend/dist
+invite-keys*.txt
+registration-invite-keys*.txt
