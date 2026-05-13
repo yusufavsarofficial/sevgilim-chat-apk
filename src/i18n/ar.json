@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "نعم",
+    "no": "لا",
+    "ok": "موافق",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق",
+    "close": "إغلاق",
+    "loading": "جارٍ التحميل...",
+    "error": "خطأ",
+    "success": "نجح",
+    "warning": "تحذير",
+    "info": "معلومات"
+  },
+  "auth": {
+    "login": "تسجيل الدخول",
+    "logout": "تسجيل الخروج",
+    "register": "التسجيل",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "email": "البريد الإلكتروني",
+    "forgotPassword": "نسيت كلمة المرور",
+    "loginWith": "تسجيل الدخول بـ {{provider}}",
+    "selectLanguage": "اختر اللغة",
+    "welcome": "مرحباً"
+  },
+  "navigation": {
+    "home": "الرئيسية",
+    "calendar": "التقويم",
+    "reports": "التقارير",
+    "settings": "الإعدادات",
+    "profile": "الملف الشخصي"
+  },
+  "calendar": {
+    "today": "اليوم",
+    "month": "الشهر",
+    "week": "الأسبوع",
+    "day": "اليوم",
+    "checkIn": "تسجيل الدخول",
+    "checkOut": "تسجيل الخروج",
+    "workedHours": "ساعات العمل",
+    "overtime": "العمل الإضافي",
+    "break": "استراحة"
+  },
+  "settings": {
+    "language": "اللغة",
+    "theme": "المظهر",
+    "notifications": "الإشعارات",
+    "salary": "الراتب",
+    "coefficients": "المعاملات",
+    "overtimeCoefficient": "معامل العمل الإضافي",
+    "sundayCoefficient": "معامل الأحد",
+    "ubgtCoefficient": "معامل UBGT",
+    "holidayCoefficient": "معامل العطل"
+  },
+  "reports": {
+    "monthlySummary": "الملخص الشهري",
+    "totalHours": "إجمالي الساعات",
+    "totalEarnings": "إجمالي الإيرادات",
+    "deductions": "الخصومات",
+    "netSalary": "صافي الراتب"
+  },
+  "errors": {
+    "networkError": "خطأ في اتصال الشبكة",
+    "invalidCredentials": "بيانات الاعتماد غير صحيحة",
+    "serverError": "خطأ في الخادم",
+    "permissionDenied": "تم رفض الإذن"
+  }
+}

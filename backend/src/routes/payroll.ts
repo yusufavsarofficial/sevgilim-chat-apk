@@ -3,7 +3,7 @@ import { z } from "zod";
 import { query } from "../db.js";
 
 const payrollSchema = z.object({
-  data: z.record(z.any())
+  data: z.object({}).passthrough()
 });
 
 export const payrollRouter = Router();

@@ -1,4 +1,55 @@
-﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+﻿// NOTE: Local/offline auth intentionally disabled.
+// This project must not ship with embedded admin credentials or invite-key hashes.
+
+export type ConsentBundle = {
+  kvkk: boolean;
+  acikRiza: boolean;
+  gizlilik: boolean;
+  cerez: boolean;
+  cihazVerisi: boolean;
+  kullanimSartlari: boolean;
+  yasalSorumluluk: boolean;
+  istegeBagliBildirim?: boolean;
+};
+
+export const CONSENT_VERSION = "2026.05.02";
+
+const LOCAL_AUTH_DISABLED_ERROR = "Bu sürümde çevrimdışı (LOCAL) kimlik doğrulama devre dışıdır.";
+
+export async function ensureDefaultSecurity(): Promise<void> {
+  throw new Error(LOCAL_AUTH_DISABLED_ERROR);
+}
+
+export async function registerUser(): Promise<never> {
+  throw new Error(LOCAL_AUTH_DISABLED_ERROR);
+}
+
+export async function loginUser(): Promise<never> {
+  throw new Error(LOCAL_AUTH_DISABLED_ERROR);
+}
+
+export async function loadSession(): Promise<null> {
+  return null;
+}
+
+export async function logout(): Promise<void> {
+  // no-op
+}
+
+export async function getSecurityQuestion(): Promise<never> {
+  throw new Error(LOCAL_AUTH_DISABLED_ERROR);
+}
+
+export async function resetPasswordWithSecurityAnswer(): Promise<never> {
+  throw new Error(LOCAL_AUTH_DISABLED_ERROR);
+}
+
+export async function removeUserAccount(): Promise<never> {
+  throw new Error(LOCAL_AUTH_DISABLED_ERROR);
+}
+
+/*
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { AuthUser, UserRole } from "./types";
 
@@ -15,6 +66,8 @@ export type ConsentBundle = {
 
 type Account = AuthUser & {
   passwordHash: string;
+  securityQuestion: string;
+  securityAnswerHash: string;
   consentAcceptedAt: string;
   consentVersion: string;
   consentSnapshot: ConsentBundle;
@@ -50,9 +103,9 @@ const CONSENT_LOG_KEY = "@puantaj-maas-apk:auth:consent-log:v1";
 const USER_DATA_PREFIX = "@puantaj-maas-apk:data:v5:";
 export const CONSENT_VERSION = "2026.05.02";
 
-const FIXED_ADMIN_USERNAME = "Ayf";
-const FIXED_ADMIN_PASSWORD_HASH = "3bbe665633d6edfd61e91598560db3fee78a21da78b3fe77e9fefac5ecfc4cc1";
-const FIXED_INVITE_KEY_HASH = "3825b97592ef25f0bb0fb784a3bfe0b016b1e27e134cff2379b69f85842cf52f";
+const FIXED_ADMIN_USERNAME = "";
+const FIXED_ADMIN_PASSWORD_HASH = "";
+const FIXED_INVITE_KEY_HASH = "";
 
 const MAX_FAIL = 5;
 const LOCK_MS = 5 * 60 * 1000;
@@ -145,6 +198,8 @@ export async function ensureDefaultSecurity(): Promise<void> {
     createdAt: adminIndex >= 0 ? users[adminIndex].createdAt : now,
     passwordHash: adminPasswordHash,
     consentAcceptedAt: adminIndex >= 0 ? users[adminIndex].consentAcceptedAt : now,
+    securityQuestion: adminIndex >= 0 ? users[adminIndex].securityQuestion : "Yönetici doğrulama sorusu",
+    securityAnswerHash: adminIndex >= 0 ? users[adminIndex].securityAnswerHash : adminPasswordHash,
     consentVersion: CONSENT_VERSION,
     consentSnapshot: {
       kvkk: true,
@@ -219,6 +274,8 @@ export async function registerUser(input: {
   username: string;
   password: string;
   inviteKey: string;
+  securityQuestion: string;
+  securityAnswer: string;
   consents: ConsentBundle;
 }): Promise<AuthUser> {
   await ensureDefaultSecurity();
@@ -233,8 +290,13 @@ export async function registerUser(input: {
 
   const normalized = normalizeUsername(input.username);
   const displayUsername = sanitizeUsername(input.username);
+  const securityQuestion = input.securityQuestion.trim();
+  const securityAnswer = input.securityAnswer.trim();
   if (normalized.length < 3 || input.password.length < 6) {
     throw new Error("Kullanıcı adı en az 3, şifre en az 6 karakter olmalıdır.");
+  }
+  if (securityQuestion.length < 5 || securityAnswer.length < 2) {
+    throw new Error("Güvenlik sorusu ve cevabı zorunludur.");
   }
 
   const inviteHash = await hashText(input.inviteKey.trim());
@@ -254,6 +316,8 @@ export async function registerUser(input: {
     role: "USER",
     createdAt: now,
     passwordHash: await hashText(input.password),
+    securityQuestion,
+    securityAnswerHash: await hashText(securityAnswer.toLowerCase()),
     consentAcceptedAt: now,
     consentVersion: CONSENT_VERSION,
     consentSnapshot: input.consents
@@ -369,17 +433,73 @@ export async function logout(): Promise<void> {
   await AsyncStorage.removeItem(SESSION_KEY);
 }
 
-export async function removeUserAccount(userId: string): Promise<void> {
+export async function removeUserAccount(input: {
+  userId: string;
+  password: string;
+  securityAnswer: string;
+}): Promise<void> {
   const users = await readJson<Account[]>(USERS_KEY, []);
-  const target = users.find((item) => item.id === userId);
+  const target = users.find((item) => item.id === input.userId);
   if (!target) {
     return;
   }
   if (target.role === "ADMIN") {
     throw new Error("Yönetici hesabı silinemez.");
   }
+  const passHash = await hashText(input.password.trim());
+  if (passHash !== target.passwordHash) {
+    throw new Error("Şifre doğrulanamadı.");
+  }
+  const answerHash = await hashText(input.securityAnswer.trim().toLowerCase());
+  if (answerHash !== target.securityAnswerHash) {
+    throw new Error("Güvenlik cevabı doğrulanamadı.");
+  }
 
-  const nextUsers = users.filter((item) => item.id !== userId);
+  const nextUsers = users.filter((item) => item.id !== input.userId);
   await writeJson(USERS_KEY, nextUsers);
-  await AsyncStorage.removeItem(`${USER_DATA_PREFIX}${userId}`);
+  await AsyncStorage.removeItem(`${USER_DATA_PREFIX}${input.userId}`);
 }
+
+export async function getSecurityQuestion(username: string): Promise<string> {
+  const normalized = normalizeUsername(username);
+  if (!normalized) {
+    throw new Error("Kullanıcı adı zorunludur.");
+  }
+  const users = await readJson<Account[]>(USERS_KEY, []);
+  const account = users.find((item) => normalizeUsername(item.username) === normalized && item.role === "USER");
+  if (!account) {
+    throw new Error("Kullanıcı bulunamadı.");
+  }
+  return account.securityQuestion;
+}
+
+export async function resetPasswordWithSecurityAnswer(input: {
+  username: string;
+  securityAnswer: string;
+  newPassword: string;
+}): Promise<void> {
+  const normalized = normalizeUsername(input.username);
+  const answer = input.securityAnswer.trim().toLowerCase();
+  if (!normalized || !answer || input.newPassword.trim().length < 6) {
+    throw new Error("Bilgiler geçersiz.");
+  }
+
+  const users = await readJson<Account[]>(USERS_KEY, []);
+  const index = users.findIndex((item) => normalizeUsername(item.username) === normalized && item.role === "USER");
+  if (index < 0) {
+    throw new Error("Kullanıcı bulunamadı.");
+  }
+
+  const expected = users[index].securityAnswerHash;
+  const provided = await hashText(answer);
+  if (expected !== provided) {
+    throw new Error("Güvenlik cevabı doğrulanamadı.");
+  }
+
+  users[index] = {
+    ...users[index],
+    passwordHash: await hashText(input.newPassword.trim())
+  };
+  await writeJson(USERS_KEY, users);
+}
+*/

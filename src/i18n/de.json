@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "Ja",
+    "no": "Nein",
+    "ok": "OK",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "add": "Hinzufügen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "previous": "Vorherige",
+    "close": "Schließen",
+    "loading": "Lädt...",
+    "error": "Fehler",
+    "success": "Erfolgreich",
+    "warning": "Warnung",
+    "info": "Info"
+  },
+  "auth": {
+    "login": "Anmelden",
+    "logout": "Abmelden",
+    "register": "Registrieren",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "email": "E-Mail",
+    "forgotPassword": "Passwort vergessen",
+    "loginWith": "Mit {{provider}} anmelden",
+    "selectLanguage": "Sprache auswählen",
+    "welcome": "Willkommen"
+  },
+  "navigation": {
+    "home": "Startseite",
+    "calendar": "Kalender",
+    "reports": "Berichte",
+    "settings": "Einstellungen",
+    "profile": "Profil"
+  },
+  "calendar": {
+    "today": "Heute",
+    "month": "Monat",
+    "week": "Woche",
+    "day": "Tag",
+    "checkIn": "Check-in",
+    "checkOut": "Check-out",
+    "workedHours": "Gearbeitete Stunden",
+    "overtime": "Überstunden",
+    "break": "Pause"
+  },
+  "settings": {
+    "language": "Sprache",
+    "theme": "Thema",
+    "notifications": "Benachrichtigungen",
+    "salary": "Gehalt",
+    "coefficients": "Koeffizienten",
+    "overtimeCoefficient": "Überstundenkurs",
+    "sundayCoefficient": "Sonntagskurs",
+    "ubgtCoefficient": "UBGT-Kurs",
+    "holidayCoefficient": "Urlaubskurs"
+  },
+  "reports": {
+    "monthlySummary": "Monatsübersicht",
+    "totalHours": "Gesamtstunden",
+    "totalEarnings": "Gesamteinnahmen",
+    "deductions": "Abzüge",
+    "netSalary": "Nettogehalt"
+  },
+  "errors": {
+    "networkError": "Netzwerkverbindungsfehler",
+    "invalidCredentials": "Ungültige Anmeldedaten",
+    "serverError": "Serverfehler",
+    "permissionDenied": "Berechtigung verweigert"
+  }
+}

@@ -15,6 +15,7 @@ import { authRouter } from "./routes/auth.js";
 import { healthRouter } from "./routes/health.js";
 import { payrollRouter } from "./routes/payroll.js";
 import { securityRouter } from "./routes/security.js";
+import { ensureSeedCourses } from "./seed/courses.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -47,8 +48,8 @@ app.use(
 );
 
 app.use(limiter);
-app.use(express.json({ limit: "300kb" }));
-app.use(express.urlencoded({ extended: false, limit: "300kb" }));
+app.use(express.json({ limit: "150mb" }));
+app.use(express.urlencoded({ extended: false, limit: "150mb" }));
 app.use(requestMetaMiddleware);
 app.use("/api", (_req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -73,8 +74,10 @@ app.get("/health", async (_req, res) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const adminPanelDir = path.resolve(__dirname, "../../admin-panel");
+const uploadsDir = path.resolve(__dirname, "../../uploads");
 
 app.use("/admin", express.static(adminPanelDir));
+app.use("/downloads", express.static(uploadsDir));
 app.get("/admin", (_req, res) => {
   res.sendFile(path.join(adminPanelDir, "index.html"));
 });
@@ -85,6 +88,7 @@ app.use(errorHandler);
 async function start(): Promise<void> {
   await ensureDatabaseSchema();
   await ensureAdminUser();
+  await ensureSeedCourses();
   app.listen(config.PORT, () => {
     process.stdout.write(`Backend hazır: http://localhost:${config.PORT}\n`);
   });

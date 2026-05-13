@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "Да",
+    "no": "Нет",
+    "ok": "OK",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "add": "Добавить",
+    "back": "Назад",
+    "next": "Далее",
+    "previous": "Предыдущий",
+    "close": "Закрыть",
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "success": "Успешно",
+    "warning": "Предупреждение",
+    "info": "Информация"
+  },
+  "auth": {
+    "login": "Войти",
+    "logout": "Выйти",
+    "register": "Регистрация",
+    "username": "Имя пользователя",
+    "password": "Пароль",
+    "email": "Электронная почта",
+    "forgotPassword": "Забыли пароль",
+    "loginWith": "Войти через {{provider}}",
+    "selectLanguage": "Выбрать язык",
+    "welcome": "Добро пожаловать"
+  },
+  "navigation": {
+    "home": "Главная",
+    "calendar": "Календарь",
+    "reports": "Отчеты",
+    "settings": "Настройки",
+    "profile": "Профиль"
+  },
+  "calendar": {
+    "today": "Сегодня",
+    "month": "Месяц",
+    "week": "Неделя",
+    "day": "День",
+    "checkIn": "Приход",
+    "checkOut": "Уход",
+    "workedHours": "Отработанные часы",
+    "overtime": "Сверхурочные",
+    "break": "Перерыв"
+  },
+  "settings": {
+    "language": "Язык",
+    "theme": "Тема",
+    "notifications": "Уведомления",
+    "salary": "Зарплата",
+    "coefficients": "Коэффициенты",
+    "overtimeCoefficient": "Коэффициент сверхурочных",
+    "sundayCoefficient": "Коэффициент воскресенья",
+    "ubgtCoefficient": "Коэффициент UBGT",
+    "holidayCoefficient": "Коэффициент праздников"
+  },
+  "reports": {
+    "monthlySummary": "Месячная сводка",
+    "totalHours": "Общее количество часов",
+    "totalEarnings": "Общий доход",
+    "deductions": "Вычеты",
+    "netSalary": "Чистая зарплата"
+  },
+  "errors": {
+    "networkError": "Ошибка сетевого подключения",
+    "invalidCredentials": "Неверные учетные данные",
+    "serverError": "Ошибка сервера",
+    "permissionDenied": "Доступ запрещен"
+  }
+}

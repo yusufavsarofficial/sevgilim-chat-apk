@@ -13,6 +13,13 @@ import {
   AppData,
   DayRecord,
   DayStatus,
+  EmployeeDocument,
+  EmployeeDocumentType,
+  EmployeeNotification,
+  EmployeePortal,
+  EmployeeRequest,
+  EmployeeRequestStatus,
+  EmployeeRequestType,
   LegalSettings,
   PersonalProfile,
   ResignationForm,
@@ -235,6 +242,85 @@ function normalizePersonalProfile(raw: unknown): PersonalProfile {
   };
 }
 
+function normalizeEmployeeRequestType(value: unknown): EmployeeRequestType {
+  if (value === "LEAVE" || value === "ADVANCE" || value === "OVERTIME" || value === "EXPENSE" || value === "PROFILE") {
+    return value;
+  }
+  return "OTHER";
+}
+
+function normalizeEmployeeRequestStatus(value: unknown): EmployeeRequestStatus {
+  if (value === "APPROVED" || value === "REJECTED" || value === "CANCELLED") {
+    return value;
+  }
+  return "PENDING";
+}
+
+function normalizeEmployeeDocumentType(value: unknown): EmployeeDocumentType {
+  if (value === "IDENTITY" || value === "IBAN" || value === "HEALTH" || value === "CONTRACT" || value === "CERTIFICATE") {
+    return value;
+  }
+  return "OTHER";
+}
+
+function normalizeEmployeePortal(raw: unknown): EmployeePortal {
+  const fallback = DEFAULT_DATA.employeePortal;
+  if (!raw || typeof raw !== "object") {
+    return { ...fallback, requests: [], documents: [], notifications: [...fallback.notifications] };
+  }
+
+  const source = raw as Partial<EmployeePortal>;
+  const now = new Date().toISOString();
+  const requests: EmployeeRequest[] = Array.isArray(source.requests)
+    ? source.requests.map((item, index) => ({
+        id: typeof item.id === "string" && item.id ? item.id : `request-${index}-${now}`,
+        type: normalizeEmployeeRequestType(item.type),
+        status: normalizeEmployeeRequestStatus(item.status),
+        title: typeof item.title === "string" ? item.title : "",
+        startDate: typeof item.startDate === "string" ? item.startDate : "",
+        endDate: typeof item.endDate === "string" ? item.endDate : "",
+        amount: safePositive(tryParseNumber(String(item.amount ?? 0))),
+        hours: safePositive(tryParseNumber(String(item.hours ?? 0))),
+        note: typeof item.note === "string" ? item.note : "",
+        managerNote: typeof item.managerNote === "string" ? item.managerNote : "",
+        createdAt: typeof item.createdAt === "string" ? item.createdAt : now,
+        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : now
+      }))
+    : [];
+  const documents: EmployeeDocument[] = Array.isArray(source.documents)
+    ? source.documents.map((item, index) => ({
+        id: typeof item.id === "string" && item.id ? item.id : `document-${index}-${now}`,
+        title: typeof item.title === "string" ? item.title : "",
+        type: normalizeEmployeeDocumentType(item.type),
+        uri: typeof item.uri === "string" ? item.uri : "",
+        note: typeof item.note === "string" ? item.note : "",
+        createdAt: typeof item.createdAt === "string" ? item.createdAt : now
+      }))
+    : [];
+  const notifications: EmployeeNotification[] = Array.isArray(source.notifications)
+    ? source.notifications.map((item, index) => ({
+        id: typeof item.id === "string" && item.id ? item.id : `notification-${index}-${now}`,
+        title: typeof item.title === "string" ? item.title : "",
+        message: typeof item.message === "string" ? item.message : "",
+        tone: item.tone === "SUCCESS" || item.tone === "WARNING" || item.tone === "DANGER" ? item.tone : "INFO",
+        read: typeof item.read === "boolean" ? item.read : false,
+        createdAt: typeof item.createdAt === "string" ? item.createdAt : now
+      }))
+    : [...fallback.notifications];
+
+  return {
+    iban: typeof source.iban === "string" ? source.iban : fallback.iban,
+    emergencyContactName: typeof source.emergencyContactName === "string" ? source.emergencyContactName : fallback.emergencyContactName,
+    emergencyContactPhone: typeof source.emergencyContactPhone === "string" ? source.emergencyContactPhone : fallback.emergencyContactPhone,
+    department: typeof source.department === "string" ? source.department : fallback.department,
+    position: typeof source.position === "string" ? source.position : fallback.position,
+    leaveBalanceDays: safePositive(tryParseNumber(String(source.leaveBalanceDays ?? fallback.leaveBalanceDays))),
+    requests,
+    documents,
+    notifications
+  };
+}
+
 function mergeWithDefaults(parsed: Partial<AppData>): AppData {
   const rawSettings = (parsed.settings ?? {}) as Partial<AppData["settings"]> & {
     dailyMealFee?: number;
@@ -258,6 +344,14 @@ function mergeWithDefaults(parsed: Partial<AppData>): AppData {
   const baseSettings = {
     ...DEFAULT_DATA.settings,
     ...rawSettings,
+    monthlySalary: safePositive(tryParseNumber(String(rawSettings.monthlySalary ?? DEFAULT_DATA.settings.monthlySalary))),
+    monthlyBaseHours: safePositive(tryParseNumber(String(rawSettings.monthlyBaseHours ?? DEFAULT_DATA.settings.monthlyBaseHours))),
+    defaultShiftHours: safePositive(tryParseNumber(String(rawSettings.defaultShiftHours ?? DEFAULT_DATA.settings.defaultShiftHours))),
+    defaultOvertimeHours: safePositive(
+      tryParseNumber(String(rawSettings.defaultOvertimeHours ?? DEFAULT_DATA.settings.defaultOvertimeHours))
+    ),
+    salaryPaymentDay: safePositive(tryParseNumber(String(rawSettings.salaryPaymentDay ?? DEFAULT_DATA.settings.salaryPaymentDay))),
+    monthlyTarget: safePositive(tryParseNumber(String(rawSettings.monthlyTarget ?? DEFAULT_DATA.settings.monthlyTarget))),
     themePreference: normalizeThemePreference(parsed.settings?.themePreference),
     dailyOvertimeThresholdHours: safePositive(
       tryParseNumber(String(rawSettings.dailyOvertimeThresholdHours ?? DEFAULT_DATA.settings.dailyOvertimeThresholdHours))
@@ -271,8 +365,14 @@ function mergeWithDefaults(parsed: Partial<AppData>): AppData {
       (parsed.settings as { mealTransportAccrualMethod?: unknown } | undefined)?.mealTransportAccrualMethod
     ),
     coefficients: {
-      ...DEFAULT_DATA.settings.coefficients,
-      ...(parsed.settings?.coefficients ?? {})
+      overtime: safePositive(
+        tryParseNumber(String(parsed.settings?.coefficients?.overtime ?? DEFAULT_DATA.settings.coefficients.overtime))
+      ),
+      sunday: safePositive(tryParseNumber(String(parsed.settings?.coefficients?.sunday ?? DEFAULT_DATA.settings.coefficients.sunday))),
+      holiday: safePositive(
+        tryParseNumber(String(parsed.settings?.coefficients?.holiday ?? DEFAULT_DATA.settings.coefficients.holiday))
+      ),
+      ubgt: safePositive(tryParseNumber(String(parsed.settings?.coefficients?.ubgt ?? DEFAULT_DATA.settings.coefficients.ubgt)))
     }
   };
 
@@ -301,6 +401,7 @@ function mergeWithDefaults(parsed: Partial<AppData>): AppData {
     },
     legal: normalizeLegalSettings(parsed.legal),
     profile: normalizePersonalProfile((parsed as { profile?: unknown }).profile),
+    employeePortal: normalizeEmployeePortal((parsed as { employeePortal?: unknown }).employeePortal),
     shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
     activeSession: null
   };

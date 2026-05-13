@@ -25,6 +25,7 @@ import {
   View
 } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { TranslationProvider, useTranslation } from "./src/contexts/TranslationContext";
 import {
   buildResignationDraft,
   buildMonthGrid,
@@ -44,9 +45,9 @@ import {
   isMealTransportEligible,
   DEFAULT_DATA,
   differenceColor,
-  formatCurrency,
+  formatCurrency as formatCurrencyBase,
   formatDateKeyTr,
-  formatSignedCurrency,
+  formatSignedCurrency as formatSignedCurrencyBase,
   isIsoDate,
   isTrDate,
   isMonthKey,
@@ -54,20 +55,19 @@ import {
   monthLabelTr,
   monthlyDifferenceLabel,
   nextMonthKey,
+  normalizeMonthPayment,
+  normalizePaymentTransactions,
+  normalizePayrollStatements,
+  normalizeSalaryHistory,
+  normalizeShiftTemplates,
   prevMonthKey,
+  resolvePayrollSettingsForMonth,
   round2,
   safePositive,
   totalDifferenceForAllMonths,
   tryParseNumber
 } from "./src/payroll";
 import { loadAppData, saveAppData } from "./src/storage";
-import {
-  ensureDefaultSecurity,
-  loadSession as loadLocalSession,
-  loginUser as localLoginUser,
-  logout as localLogoutUser,
-  registerUser as localRegisterUser
-} from "./src/auth";
 import {
   adminBanUser,
   adminDeleteUserData,
@@ -79,17 +79,22 @@ import {
   adminGetUsers,
   adminAddIpBan,
   adminAddUserNote,
+  adminPurgeUsers,
   adminRemoveIpBan,
   adminRevokeUserSessions,
   adminUnbanUser,
+  getAppUpdateInfo,
   getApiBaseUrl,
   pingBackend,
   pullPayrollFromBackend,
   pushPayrollToBackend,
   remoteLogin,
+  remoteGetSecurityQuestion,
   remoteLogout,
   remoteMe,
+  remoteDeleteOwnAccount,
   remoteRegister,
+  remoteResetPasswordWithSecurityAnswer,
   sendSecuritySignal,
   testBackendHealth
 } from "./src/api";
@@ -98,13 +103,21 @@ import {
   AuthUser,
   DayRecord,
   DayStatus,
+  EmployeeDocumentType,
+  EmployeeNotification,
+  EmployeeRequestStatus,
+  EmployeeRequestType,
   LegalSettings,
   MonthPayment,
+  PaymentTransaction,
+  PayrollStatement,
+  SalaryHistoryEntry,
+  ShiftTemplate,
   ResignationTemplateKey,
   TerminationType
 } from "./src/types";
 
-type Tab = "CALENDAR" | "SUMMARY" | "SETTINGS" | "SYNC" | "LEGAL" | "USERS" | "APP_SETTINGS" | "SUPPORT";
+type Tab = "CALENDAR" | "SUMMARY" | "EMPLOYEE" | "SETTINGS" | "SYNC" | "LEGAL" | "USERS" | "APP_SETTINGS" | "SUPPORT";
 type PaymentField = keyof MonthPayment;
 type NumericSettingKey =
   | "monthlySalary"
@@ -115,10 +128,41 @@ type NumericSettingKey =
   | "defaultOvertimeHours"
   | "monthlyMealAllowance"
   | "monthlyTransportAllowance"
+  | "nightPremiumRate"
   | "salaryPaymentDay"
   | "monthlyTarget";
 
+const APP_LOGO = require("./assets/logo.png");
 const WEEK_LABELS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+const EVIDENCE_TYPE_OPTIONS: Array<{ value: AppData["evidenceFiles"][number]["type"]; label: string }> = [
+  { value: "BORDRO", label: "Bordro" },
+  { value: "DEKONT", label: "Dekont" },
+  { value: "WHATSAPP", label: "WhatsApp" },
+  { value: "VARDIYA", label: "Vardiya" },
+  { value: "OTHER", label: "Diğer" }
+];
+const EMPLOYEE_REQUEST_TYPE_OPTIONS: Array<{ value: EmployeeRequestType; label: string }> = [
+  { value: "LEAVE", label: "İzin" },
+  { value: "ADVANCE", label: "Avans" },
+  { value: "OVERTIME", label: "Mesai" },
+  { value: "EXPENSE", label: "Masraf" },
+  { value: "PROFILE", label: "Bilgi güncelleme" },
+  { value: "OTHER", label: "Diğer" }
+];
+const EMPLOYEE_DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string }> = [
+  { value: "IDENTITY", label: "Kimlik" },
+  { value: "IBAN", label: "IBAN" },
+  { value: "HEALTH", label: "Sağlık raporu" },
+  { value: "CONTRACT", label: "Sözleşme" },
+  { value: "CERTIFICATE", label: "Sertifika" },
+  { value: "OTHER", label: "Diğer" }
+];
+const EMPLOYEE_REQUEST_STATUS_LABELS: Record<EmployeeRequestStatus, string> = {
+  PENDING: "Onay bekliyor",
+  APPROVED: "Onaylandı",
+  REJECTED: "Reddedildi",
+  CANCELLED: "İptal edildi"
+};
 const TERMINATION_TYPE_OPTIONS: Array<{ value: TerminationType; label: string }> = [
   { value: "EMPLOYER_TERMINATION", label: "İşveren feshi" },
   { value: "EMPLOYEE_RESIGNATION", label: "İstifa" },
@@ -171,6 +215,12 @@ const LEGAL_SECTIONS: Array<{ id: string; title: string; content: string }> = [
     title: "Gizlilik Politikası",
     content:
       "Uygulama verileri yetkisiz erişim, ifşa, değiştirme ve kayba karşı teknik ve idari tedbirlerle korunur. Kimlik doğrulama, oturum yönetimi, oran sınırlama, erişim denetimi ve kayıt mekanizmaları güvenlik çerçevesinin parçasıdır. Kullanıcı verileri ticari amaçla üçüncü taraflara satılmaz. Yasal zorunluluk veya resmi merci talebi dışında paylaşım yapılmaz."
+  },
+  {
+    id: "gizlilik-guvence",
+    title: "Gizlilik ve Güvenlik Taahhüdü",
+    content:
+      "Puantaj, bordro, belge, IBAN, acil kişi ve iletişim verileri yalnızca uygulamanın çalışma, hesaplama, yedekleme, destek ve güvenlik amaçları için kullanılır. Admin işlemleri denetim kayıtlarına işlenir; kullanıcı verisi görüntüleme, silme, banlama ve oturum sonlandırma gibi işlemler yetki kontrolüne tabidir. Kullanıcı, hesabının silinmesini veya hatalı verinin düzeltilmesini talep edebilir; mevzuaten saklanması gerekmeyen veriler güvenli şekilde kaldırılır."
   },
   {
     id: "cerez",
@@ -237,6 +287,12 @@ const LEGAL_SECTIONS: Array<{ id: string; title: string; content: string }> = [
     title: "İstifa Süreçleri",
     content:
       "İstifa sürecinde tarih, gerekçe ve teslim biçimi önemlidir. Haklı fesih, askerlik, evlilik, mobbing veya ücretin ödenmemesi gibi nedenlerde mevzuata uygun belge ve bildirim düzeni izlenmelidir. Uygulama, dilekçe taslakları sunar; nihai metin somut olaya göre uzman desteğiyle kontrol edilmelidir."
+  },
+  {
+    id: "istifa-kontrol-listesi",
+    title: "İstifa ve Fesih Kontrol Listesi",
+    content:
+      "Dilekçe hazırlanırken işe giriş tarihi, ayrılış tarihi, bildirim tarihi, çalışma yeri, departman, imza, teslim kanalı ve varsa haklı fesih gerekçesini destekleyen belgeler birlikte kontrol edilmelidir. İhbar süresi, kıdem hakkı, kullanılmayan izin, fazla mesai, ücret alacağı, SGK primi ve yan haklar ayrı ayrı değerlendirilmelidir. İşleme başlamadan önce dilekçenin bir örneği saklanmalı ve teslim alındı bilgisi belgelenmelidir."
   }
 ];
 
@@ -334,17 +390,65 @@ function normalizeIncomingData(data: AppData | null | undefined): AppData {
     return DEFAULT_DATA;
   }
 
+  const paidByMonth: Record<string, MonthPayment> = {};
+  if (data.paidByMonth && typeof data.paidByMonth === "object") {
+    for (const [key, value] of Object.entries(data.paidByMonth)) {
+      if (isMonthKey(key)) {
+        paidByMonth[key] = normalizeMonthPayment(value);
+      }
+    }
+  }
+
   return {
     ...DEFAULT_DATA,
     ...data,
     settings: {
       ...DEFAULT_DATA.settings,
       ...data.settings,
+      monthlySalary: safePositive(tryParseNumber(String(data.settings?.monthlySalary ?? DEFAULT_DATA.settings.monthlySalary))),
+      monthlyBaseHours: safePositive(tryParseNumber(String(data.settings?.monthlyBaseHours ?? DEFAULT_DATA.settings.monthlyBaseHours))),
+      weeklyOvertimeThresholdHours: safePositive(
+        tryParseNumber(String(data.settings?.weeklyOvertimeThresholdHours ?? DEFAULT_DATA.settings.weeklyOvertimeThresholdHours))
+      ),
+      dailyOvertimeThresholdHours: safePositive(
+        tryParseNumber(String(data.settings?.dailyOvertimeThresholdHours ?? DEFAULT_DATA.settings.dailyOvertimeThresholdHours))
+      ),
+      defaultShiftHours: safePositive(tryParseNumber(String(data.settings?.defaultShiftHours ?? DEFAULT_DATA.settings.defaultShiftHours))),
+      defaultOvertimeHours: safePositive(
+        tryParseNumber(String(data.settings?.defaultOvertimeHours ?? DEFAULT_DATA.settings.defaultOvertimeHours))
+      ),
+      monthlyMealAllowance: safePositive(
+        tryParseNumber(String(data.settings?.monthlyMealAllowance ?? DEFAULT_DATA.settings.monthlyMealAllowance))
+      ),
+      monthlyTransportAllowance: safePositive(
+        tryParseNumber(String(data.settings?.monthlyTransportAllowance ?? DEFAULT_DATA.settings.monthlyTransportAllowance))
+      ),
+      nightPremiumRate: safePositive(tryParseNumber(String(data.settings?.nightPremiumRate ?? DEFAULT_DATA.settings.nightPremiumRate))),
+      salaryPaymentDay: safePositive(tryParseNumber(String(data.settings?.salaryPaymentDay ?? DEFAULT_DATA.settings.salaryPaymentDay))),
+      monthlyTarget: safePositive(tryParseNumber(String(data.settings?.monthlyTarget ?? DEFAULT_DATA.settings.monthlyTarget))),
       coefficients: {
-        ...DEFAULT_DATA.settings.coefficients,
-        ...(data.settings?.coefficients ?? {})
+        overtime: safePositive(
+          tryParseNumber(String(data.settings?.coefficients?.overtime ?? DEFAULT_DATA.settings.coefficients.overtime))
+        ),
+        sunday: safePositive(tryParseNumber(String(data.settings?.coefficients?.sunday ?? DEFAULT_DATA.settings.coefficients.sunday))),
+        holiday: safePositive(
+          tryParseNumber(String(data.settings?.coefficients?.holiday ?? DEFAULT_DATA.settings.coefficients.holiday))
+        ),
+        ubgt: safePositive(tryParseNumber(String(data.settings?.coefficients?.ubgt ?? DEFAULT_DATA.settings.coefficients.ubgt)))
       }
     },
+    salaryHistory: normalizeSalaryHistory(
+      Array.isArray((data as { salaryHistory?: SalaryHistoryEntry[] }).salaryHistory)
+        ? (data as { salaryHistory?: SalaryHistoryEntry[] }).salaryHistory
+        : [],
+      data.settings ? { ...DEFAULT_DATA.settings, ...data.settings } : DEFAULT_DATA.settings
+    ),
+    paymentTransactions: normalizePaymentTransactions((data as { paymentTransactions?: PaymentTransaction[] }).paymentTransactions),
+    payrollStatements: normalizePayrollStatements((data as { payrollStatements?: PayrollStatement[] }).payrollStatements),
+    shiftTemplates: normalizeShiftTemplates((data as { shiftTemplates?: ShiftTemplate[] }).shiftTemplates),
+    evidenceFiles: Array.isArray((data as { evidenceFiles?: AppData["evidenceFiles"] }).evidenceFiles)
+      ? ((data as { evidenceFiles?: AppData["evidenceFiles"] }).evidenceFiles ?? [])
+      : [],
     legal: {
       ...DEFAULT_DATA.legal,
       ...data.legal,
@@ -357,8 +461,21 @@ function normalizeIncomingData(data: AppData | null | undefined): AppData {
       ...DEFAULT_DATA.profile,
       ...((data as Partial<AppData>).profile ?? {})
     },
+    employeePortal: {
+      ...DEFAULT_DATA.employeePortal,
+      ...((data as Partial<AppData>).employeePortal ?? {}),
+      requests: Array.isArray((data as Partial<AppData>).employeePortal?.requests)
+        ? ((data as Partial<AppData>).employeePortal?.requests ?? [])
+        : [],
+      documents: Array.isArray((data as Partial<AppData>).employeePortal?.documents)
+        ? ((data as Partial<AppData>).employeePortal?.documents ?? [])
+        : [],
+      notifications: Array.isArray((data as Partial<AppData>).employeePortal?.notifications)
+        ? ((data as Partial<AppData>).employeePortal?.notifications ?? [])
+        : DEFAULT_DATA.employeePortal.notifications
+    },
     dayRecords: data.dayRecords ?? {},
-    paidByMonth: data.paidByMonth ?? {},
+    paidByMonth,
     holidayDates: Array.isArray(data.holidayDates) ? data.holidayDates : DEFAULT_DATA.holidayDates,
     halfHolidayDates: Array.isArray((data as { halfHolidayDates?: unknown }).halfHolidayDates)
       ? ((data as { halfHolidayDates: string[] }).halfHolidayDates ?? DEFAULT_DATA.halfHolidayDates)
@@ -428,27 +545,84 @@ function profileInitials(name: string, fallback: string): string {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
+const LanguageSelector: React.FC = () => {
+  const { language, setLanguage, t } = useTranslation();
+  const [showPicker, setShowPicker] = useState(false);
+
+  const languages = [
+    { code: 'tr' as const, name: 'Türkçe', flag: '🇹🇷' },
+    { code: 'th' as const, name: 'ไทย', flag: '🇹🇭' },
+  ];
+
+  const currentLang = languages.find(l => l.code === language);
+
+  return (
+    <View style={styles.languageSelector}>
+      <Pressable
+        style={styles.languageButton}
+        onPress={() => setShowPicker(!showPicker)}
+      >
+        <Text style={styles.languageButtonText}>
+          {currentLang?.flag} {currentLang?.name}
+        </Text>
+      </Pressable>
+
+      {showPicker && (
+        <View style={styles.languagePicker}>
+          {languages.map(lang => (
+            <Pressable
+              key={lang.code}
+              style={[
+                styles.languageOption,
+                language === lang.code && styles.languageOptionSelected
+              ]}
+              onPress={() => {
+                setLanguage(lang.code);
+                setShowPicker(false);
+              }}
+            >
+              <Text style={styles.languageOptionText}>
+                {lang.flag} {lang.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+};
+
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppContent />
-    </SafeAreaProvider>
+    <TranslationProvider>
+      <SafeAreaProvider>
+        <AppContent />
+      </SafeAreaProvider>
+    </TranslationProvider>
   );
 }
 
 function AppContent() {
+  const { language } = useTranslation();
+  const formatCurrency = (value: number) => formatCurrencyBase(value, language);
+  const formatSignedCurrency = (value: number) => formatSignedCurrencyBase(value, language);
   const [appData, setAppData] = useState<AppData>(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [authMode, setAuthMode] = useState<"USER_LOGIN" | "USER_REGISTER">("USER_LOGIN");
+  const [authMode, setAuthMode] = useState<"USER_LOGIN" | "USER_REGISTER" | "FORGOT_PASSWORD">("USER_LOGIN");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [authSource, setAuthSource] = useState<"REMOTE" | "LOCAL" | null>(null);
+  const [authSource, setAuthSource] = useState<"REMOTE" | null>(null);
   const [backendConnected, setBackendConnected] = useState(false);
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authInviteKey, setAuthInviteKey] = useState("");
+  const [authSecurityQuestion, setAuthSecurityQuestion] = useState("");
+  const [authSecurityAnswer, setAuthSecurityAnswer] = useState("");
+  const [authResetNewPassword, setAuthResetNewPassword] = useState("");
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deleteAccountSecurityAnswer, setDeleteAccountSecurityAnswer] = useState("");
   const [consentKvkk, setConsentKvkk] = useState(false);
   const [consentAcikRiza, setConsentAcikRiza] = useState(false);
   const [consentGizlilik, setConsentGizlilik] = useState(false);
@@ -487,16 +661,71 @@ function AppContent() {
   const [bulkEndDateKey, setBulkEndDateKey] = useState<string | null>(null);
   const [supportSubject, setSupportSubject] = useState("Destek Talebi");
   const [supportMessage, setSupportMessage] = useState("");
+  const [paymentForm, setPaymentForm] = useState({ date: "", kind: "BANK", amount: "", description: "" });
+  const [statementForm, setStatementForm] = useState({
+    bordroNetSalary: "",
+    bordroOvertime: "",
+    bordroSunday: "",
+    bordroUbgt: "",
+    bordroMeal: "",
+    bordroTransport: "",
+    bankPaid: "",
+    cashPaid: "",
+    advanceDeduction: "",
+    note: ""
+  });
+  const [shiftTemplateForm, setShiftTemplateForm] = useState({
+    name: "",
+    start: "09:00",
+    end: "18:00",
+    breakMinutes: "60",
+    totalHours: "8",
+    manualOvertimeHours: "0",
+    note: ""
+  });
+  const [evidenceForm, setEvidenceForm] = useState({ title: "", type: "BORDRO", uri: "", note: "" });
+  const [employeeRequestForm, setEmployeeRequestForm] = useState({
+    type: "LEAVE" as EmployeeRequestType,
+    title: "",
+    startDate: "",
+    endDate: "",
+    amount: "",
+    hours: "",
+    note: ""
+  });
+  const [employeeDocumentForm, setEmployeeDocumentForm] = useState({
+    title: "",
+    type: "IDENTITY" as EmployeeDocumentType,
+    uri: "",
+    note: ""
+  });
+  const [salaryHistoryEditingId, setSalaryHistoryEditingId] = useState<string | null>(null);
+  const [salaryHistoryForm, setSalaryHistoryForm] = useState({
+    startMonth: currentMonthKey(),
+    endMonth: "",
+    monthlySalary: "",
+    monthlyBaseHours: "225",
+    weeklyOvertimeThresholdHours: "45",
+    dailyOvertimeThresholdHours: "7.5",
+    monthlyMealAllowance: "",
+    monthlyTransportAllowance: "",
+    overtimeCoefficient: "1.5",
+    sundayCoefficient: "1.5",
+    ubgtCoefficient: "1",
+    note: ""
+  });
 
   const [holidayInput, setHolidayInput] = useState("");
   const [paymentInputs, setPaymentInputs] = useState<Record<PaymentField, string>>(
     paidInputFromPayment({ salary: 0, overtime: 0, sunday: 0, ubgt: 0, meal: 0, transport: 0 })
   );
+  const [focusedPaymentField, setFocusedPaymentField] = useState<PaymentField | null>(null);
   const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSequenceRef = useRef(0);
   const usernameInputRef = useRef<TextInput | null>(null);
   const passwordInputRef = useRef<TextInput | null>(null);
   const inviteKeyInputRef = useRef<TextInput | null>(null);
+  const updateAlertShownRef = useRef(false);
 
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -511,14 +740,12 @@ function AppContent() {
     }, 15000);
 
     const bootstrap = async () => {
-      await ensureDefaultSecurity().catch(() => {});
-
       const backendOk = await pingBackend().catch(() => false);
       if (mounted) {
         setBackendConnected(backendOk);
       }
 
-      const remoteSession = backendOk ? await remoteMe().catch(() => null) : null;
+      const remoteSession = await remoteMe().catch(() => null);
       if (remoteSession) {
         const localData = await loadAppData(remoteSession.id);
         let mergedData = normalizeIncomingData(localData);
@@ -544,24 +771,10 @@ function AppContent() {
         setLoaded(true);
         return;
       }
-
-      const localSession = await loadLocalSession().catch(() => null);
-      if (!localSession) {
-        if (mounted) {
-          setLoaded(true);
-        }
-        return;
+      // Local/offline auth is disabled (client must not contain admin/invite secrets).
+      if (mounted) {
+        setLoaded(true);
       }
-
-      const localData = await loadAppData(localSession.id);
-      if (!mounted) {
-        return;
-      }
-
-      setAuthUser(localSession);
-      setAuthSource("LOCAL");
-      setAppData(normalizeIncomingData(localData));
-      setLoaded(true);
     };
 
     bootstrap().catch(() => {
@@ -584,6 +797,36 @@ function AppContent() {
     NavigationBar.setBackgroundColorAsync("#050816").catch(() => {});
     NavigationBar.setButtonStyleAsync("light").catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!loaded || updateAlertShownRef.current) {
+      return;
+    }
+    updateAlertShownRef.current = true;
+    getAppUpdateInfo()
+      .then((update) => {
+        if (!update || !update.apkUrl) {
+          return;
+        }
+        Alert.alert(
+          update.required ? "Zorunlu güncelleme var" : "Yeni güncelleme var",
+          `${update.version ? `Sürüm: ${update.version}\n` : ""}${update.message || "Yeni APK dosyası hazır."}`,
+          [
+            { text: update.required ? "Tamam" : "Daha sonra", style: "cancel" },
+            {
+              text: "APK Aç",
+              onPress: () => {
+                const url = update.apkUrl.startsWith("http") ? update.apkUrl : `${getApiBaseUrl()}${update.apkUrl}`;
+                Linking.openURL(url).catch(() => {
+                  Alert.alert("Güncelleme", "APK bağlantısı açılamadı.");
+                });
+              }
+            }
+          ]
+        );
+      })
+      .catch(() => {});
+  }, [loaded]);
 
   useEffect(() => {
     if (!loaded || !authUser) {
@@ -630,27 +873,129 @@ function AppContent() {
     };
   }, [appData, authSource, authUser, loaded]);
 
+  const persistUserDataNow = async () => {
+    if (!authUser) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveAppData(appData, authUser.id);
+      if (authSource === "REMOTE") {
+        await pushPayrollToBackend(appData);
+        setBackendConnected(true);
+      }
+    } catch {
+      if (authSource === "REMOTE") {
+        setBackendConnected(false);
+      }
+      throw new Error("Değişiklikler kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const effectiveSettings = useMemo(
+    () => resolvePayrollSettingsForMonth(appData.settings, appData.salaryHistory, monthKey),
+    [appData.salaryHistory, appData.settings, monthKey]
+  );
+  const activeSalaryHistoryEntry = useMemo(() => {
+    return [...appData.salaryHistory]
+      .filter((entry) => entry.startMonth <= monthKey && (!entry.endMonth || entry.endMonth >= monthKey))
+      .sort((a, b) => b.startMonth.localeCompare(a.startMonth))[0] ?? null;
+  }, [appData.salaryHistory, monthKey]);
+  const currentMonthTransactions = useMemo(
+    () => appData.paymentTransactions.filter((item) => item.monthKey === monthKey).sort((a, b) => a.date.localeCompare(b.date)),
+    [appData.paymentTransactions, monthKey]
+  );
+  const currentMonthStatement = useMemo(
+    () => appData.payrollStatements.find((item) => item.monthKey === monthKey) ?? null,
+    [appData.payrollStatements, monthKey]
+  );
+  const currentMonthEvidence = useMemo(
+    () => appData.evidenceFiles.filter((item) => item.monthKey === monthKey),
+    [appData.evidenceFiles, monthKey]
+  );
+  const employeeRequests = useMemo(
+    () => [...appData.employeePortal.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [appData.employeePortal.requests]
+  );
+  const unreadEmployeeNotifications = useMemo(
+    () => appData.employeePortal.notifications.filter((item) => !item.read).length,
+    [appData.employeePortal.notifications]
+  );
+  const currentMonthMissingDays = useMemo(() => {
+    if (!isMonthKey(monthKey)) {
+      return [];
+    }
+    const [yearStr, monthStr] = monthKey.split("-");
+    const daysInMonth = new Date(Number(yearStr), Number(monthStr), 0).getDate();
+    const missing: string[] = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const dateKey = `${monthKey}-${`${day}`.padStart(2, "0")}`;
+      const record = appData.dayRecords[dateKey];
+      if (!record || record.status === null) {
+        missing.push(dateKey);
+      }
+    }
+    return missing;
+  }, [appData.dayRecords, monthKey]);
+
   const summary = useMemo(() => {
     return calculateMonthlySummary(
       appData.dayRecords,
-      appData.settings,
+      effectiveSettings,
       appData.paidByMonth,
       monthKey,
       appData.holidayDates,
-      appData.halfHolidayDates
+      appData.halfHolidayDates,
+      appData.paymentTransactions,
+      appData.payrollStatements
     );
-  }, [appData.dayRecords, appData.halfHolidayDates, appData.holidayDates, appData.paidByMonth, appData.settings, monthKey]);
+  }, [appData.dayRecords, appData.halfHolidayDates, appData.holidayDates, appData.paidByMonth, appData.paymentTransactions, appData.payrollStatements, effectiveSettings, monthKey]);
 
   useEffect(() => {
+    if (focusedPaymentField) {
+      return;
+    }
     setPaymentInputs(paidInputFromPayment(summary.paid));
-  }, [monthKey, summary.paid]);
+  }, [focusedPaymentField, monthKey, summary.paid]);
 
   const monthGrid = useMemo(() => buildMonthGrid(monthKey), [monthKey]);
   const totalDifference = useMemo(() => totalDifferenceForAllMonths(appData), [appData]);
   const legalResult = useMemo(() => calculateLegalResult(appData.legal), [appData.legal]);
+  const employeeHealthChecks = useMemo(() => {
+    const checks: Array<{ label: string; value: string; tone: "OK" | "WARN" | "DANGER" }> = [];
+    checks.push({
+      label: "Ay puantaj durumu",
+      value:
+        currentMonthMissingDays.length === 0
+          ? "Eksik gün yok"
+          : `${currentMonthMissingDays.length} gün işlenmemiş`,
+      tone: currentMonthMissingDays.length === 0 ? "OK" : "WARN"
+    });
+    checks.push({
+      label: "Maaş ayarı",
+      value: summary.salaryConfigured ? `${formatCurrency(summary.hourlyRate)} / saat` : "Maaş veya baz saat eksik",
+      tone: summary.salaryConfigured ? "OK" : "DANGER"
+    });
+    checks.push({
+      label: "Ödeme kontrolü",
+      value:
+        summary.paidTotal > 0
+          ? `${monthlyDifferenceLabel(summary.difference)} ${formatSignedCurrency(summary.difference)}`
+          : "Bu ay ödeme girişi yok",
+      tone: summary.paidTotal > 0 ? (summary.difference < 0 ? "DANGER" : "OK") : "WARN"
+    });
+    checks.push({
+      label: "Yan hak",
+      value: `${summary.mealEntitledDays} gün yemek, ${summary.transportEntitledDays} gün yol`,
+      tone: "OK"
+    });
+    return checks;
+  }, [currentMonthMissingDays.length, formatCurrency, formatSignedCurrency, summary]);
   const analytics = useMemo(() => {
-    return calculateMonthlyAnalytics(appData.dayRecords, appData.settings, monthKey, appData.holidayDates, summary);
-  }, [appData.dayRecords, appData.holidayDates, appData.settings, monthKey, summary]);
+    return calculateMonthlyAnalytics(appData.dayRecords, effectiveSettings, monthKey, appData.holidayDates, summary);
+  }, [appData.dayRecords, appData.holidayDates, effectiveSettings, monthKey, summary]);
   const periodText =
     summary.salaryPeriodStart && summary.salaryPeriodDisplayEnd
       ? `${formatDateKeyTr(summary.salaryPeriodStart)} - ${formatDateKeyTr(summary.salaryPeriodDisplayEnd)}`
@@ -692,8 +1037,8 @@ function AppContent() {
   const selectedAutoDailyOvertime =
     selectedDayRecord?.status === "WORKED"
       ? calculateDailyOvertimeHours(
-          selectedDayRecord.work?.totalHours ?? appData.settings.defaultShiftHours,
-          appData.settings,
+          selectedDayRecord.work?.totalHours ?? effectiveSettings.defaultShiftHours,
+          effectiveSettings,
           selectedDayRecord.work?.manualOvertimeOverrideHours
         )
       : 0;
@@ -708,15 +1053,45 @@ function AppContent() {
       return;
     }
     const record = normalizeDayRecord(appData.dayRecords[selectedDateKey]);
-    setDayEditStart(record.work?.start ?? appData.settings.defaultShiftStart);
-    setDayEditEnd(record.work?.end ?? appData.settings.defaultShiftEnd);
-    setDayEditTotalHours(String(record.work?.totalHours ?? appData.settings.defaultShiftHours));
+    setDayEditStart(record.work?.start ?? effectiveSettings.defaultShiftStart);
+    setDayEditEnd(record.work?.end ?? effectiveSettings.defaultShiftEnd);
+    setDayEditTotalHours(String(record.work?.totalHours ?? effectiveSettings.defaultShiftHours));
     setDayEditBreakMinutes(String(record.work?.breakMinutes ?? 0));
     setDayEditManualOvertime(
       record.work?.manualOvertimeOverrideHours === undefined ? "" : String(record.work.manualOvertimeOverrideHours)
     );
     setDayEditNote(record.note ?? "");
-  }, [appData.dayRecords, appData.settings.defaultShiftEnd, appData.settings.defaultShiftHours, appData.settings.defaultShiftStart, selectedDateKey, statusModalVisible]);
+  }, [appData.dayRecords, effectiveSettings, selectedDateKey, statusModalVisible]);
+
+  useEffect(() => {
+    if (!currentMonthStatement) {
+      setStatementForm({
+        bordroNetSalary: "",
+        bordroOvertime: "",
+        bordroSunday: "",
+        bordroUbgt: "",
+        bordroMeal: "",
+        bordroTransport: "",
+        bankPaid: "",
+        cashPaid: "",
+        advanceDeduction: "",
+        note: ""
+      });
+      return;
+    }
+    setStatementForm({
+      bordroNetSalary: String(currentMonthStatement.bordroNetSalary),
+      bordroOvertime: String(currentMonthStatement.bordroOvertime),
+      bordroSunday: String(currentMonthStatement.bordroSunday),
+      bordroUbgt: String(currentMonthStatement.bordroUbgt),
+      bordroMeal: String(currentMonthStatement.bordroMeal),
+      bordroTransport: String(currentMonthStatement.bordroTransport),
+      bankPaid: String(currentMonthStatement.bankPaid),
+      cashPaid: String(currentMonthStatement.cashPaid),
+      advanceDeduction: String(currentMonthStatement.advanceDeduction),
+      note: currentMonthStatement.note
+    });
+  }, [currentMonthStatement]);
 
   const updateMonthPaymentInput = (field: PaymentField, value: string) => {
     setPaymentInputs((prev) => ({
@@ -725,7 +1100,16 @@ function AppContent() {
     }));
   };
 
-  const saveMonthPayment = () => {
+  const buildPaymentFromInputs = (): MonthPayment => ({
+    salary: safePositive(tryParseNumber(paymentInputs.salary)),
+    overtime: safePositive(tryParseNumber(paymentInputs.overtime)),
+    sunday: safePositive(tryParseNumber(paymentInputs.sunday)),
+    ubgt: safePositive(tryParseNumber(paymentInputs.ubgt)),
+    meal: safePositive(tryParseNumber(paymentInputs.meal)),
+    transport: safePositive(tryParseNumber(paymentInputs.transport))
+  });
+
+  const commitMonthPayment = (showConfirmation = false) => {
     if (!isMonthKey(monthKey)) {
       Alert.alert("Ay formatı hatalı", "Ay bilgisi YYYY-MM olmalı.");
       return;
@@ -735,14 +1119,9 @@ function AppContent() {
       return;
     }
 
-    const payment: MonthPayment = {
-      salary: safePositive(tryParseNumber(paymentInputs.salary)),
-      overtime: safePositive(tryParseNumber(paymentInputs.overtime)),
-      sunday: safePositive(tryParseNumber(paymentInputs.sunday)),
-      ubgt: safePositive(tryParseNumber(paymentInputs.ubgt)),
-      meal: safePositive(tryParseNumber(paymentInputs.meal)),
-      transport: safePositive(tryParseNumber(paymentInputs.transport))
-    };
+    const payment = buildPaymentFromInputs();
+    setFocusedPaymentField(null);
+    setPaymentInputs(paidInputFromPayment(payment));
 
     setAppData((prev) => ({
       ...prev,
@@ -751,6 +1130,461 @@ function AppContent() {
         [monthKey]: payment
       }
     }));
+    if (showConfirmation) {
+      Alert.alert("Kaydedildi", "Ödeme bilgileri kaydedildi.");
+    }
+  };
+
+  const saveMonthPayment = () => commitMonthPayment(true);
+
+  const addPaymentTransaction = () => {
+    const amount = safePositive(tryParseNumber(paymentForm.amount));
+    if (amount <= 0) {
+      Alert.alert("Tutar eksik", "Ödeme tutarı girin.");
+      return;
+    }
+    const date = isIsoDate(paymentForm.date) ? paymentForm.date : `${monthKey}-01`;
+    setAppData((prev) => ({
+      ...prev,
+      paymentTransactions: [
+        ...prev.paymentTransactions,
+        {
+          id: `payment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          monthKey,
+          date,
+          kind: paymentForm.kind as PaymentTransaction["kind"],
+          amount,
+          description: paymentForm.description.trim()
+        }
+      ]
+    }));
+    setPaymentForm({ date: "", kind: "BANK", amount: "", description: "" });
+  };
+
+  const deletePaymentTransaction = (id: string) => {
+    setAppData((prev) => ({
+      ...prev,
+      paymentTransactions: prev.paymentTransactions.filter((item) => item.id !== id)
+    }));
+  };
+
+  const savePayrollStatement = () => {
+    const statement: PayrollStatement = {
+      id: `statement-${monthKey}`,
+      monthKey,
+      bordroNetSalary: safePositive(tryParseNumber(statementForm.bordroNetSalary)),
+      bordroOvertime: safePositive(tryParseNumber(statementForm.bordroOvertime)),
+      bordroSunday: safePositive(tryParseNumber(statementForm.bordroSunday)),
+      bordroUbgt: safePositive(tryParseNumber(statementForm.bordroUbgt)),
+      bordroMeal: safePositive(tryParseNumber(statementForm.bordroMeal)),
+      bordroTransport: safePositive(tryParseNumber(statementForm.bordroTransport)),
+      bankPaid: safePositive(tryParseNumber(statementForm.bankPaid)),
+      cashPaid: safePositive(tryParseNumber(statementForm.cashPaid)),
+      advanceDeduction: safePositive(tryParseNumber(statementForm.advanceDeduction)),
+      note: statementForm.note.trim()
+    };
+    setAppData((prev) => ({
+      ...prev,
+      payrollStatements: [
+        ...prev.payrollStatements.filter((item) => item.monthKey !== monthKey),
+        statement
+      ]
+    }));
+  };
+
+  const addShiftTemplate = () => {
+    if (!shiftTemplateForm.name.trim()) {
+      Alert.alert("Şablon adı eksik", "Vardiya şablonu için ad girin.");
+      return;
+    }
+    setAppData((prev) => ({
+      ...prev,
+      shiftTemplates: [
+        ...prev.shiftTemplates,
+        {
+          id: `template-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: shiftTemplateForm.name.trim(),
+          start: shiftTemplateForm.start.trim() || effectiveSettings.defaultShiftStart,
+          end: shiftTemplateForm.end.trim() || effectiveSettings.defaultShiftEnd,
+          breakMinutes: safePositive(tryParseNumber(shiftTemplateForm.breakMinutes)),
+          totalHours: safePositive(tryParseNumber(shiftTemplateForm.totalHours)),
+          manualOvertimeHours: safePositive(tryParseNumber(shiftTemplateForm.manualOvertimeHours)),
+          note: shiftTemplateForm.note.trim()
+        }
+      ]
+    }));
+    setShiftTemplateForm({ name: "", start: "09:00", end: "18:00", breakMinutes: "60", totalHours: "8", manualOvertimeHours: "0", note: "" });
+  };
+
+  const applyShiftTemplateToSelectedDay = (template: ShiftTemplate) => {
+    if (!selectedDateKey) {
+      return;
+    }
+    setAppData((prev) => ({
+      ...prev,
+      dayRecords: {
+        ...prev.dayRecords,
+        [selectedDateKey]: {
+          dateKey: selectedDateKey,
+          status: "WORKED",
+          isManual: true,
+          work: {
+            start: template.start,
+            end: template.end,
+            totalHours: template.totalHours,
+            breakMinutes: template.breakMinutes,
+            manualOvertimeOverrideHours: template.manualOvertimeHours || undefined
+          },
+          note: template.note,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    }));
+  };
+
+  const addEvidenceFile = () => {
+    if (!evidenceForm.title.trim()) {
+      Alert.alert("Belge adı eksik", "Delil/belge için başlık girin.");
+      return;
+    }
+    setAppData((prev) => ({
+      ...prev,
+      evidenceFiles: [
+        ...prev.evidenceFiles,
+        {
+          id: `evidence-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          monthKey,
+          title: evidenceForm.title.trim(),
+          type: evidenceForm.type as AppData["evidenceFiles"][number]["type"],
+          uri: evidenceForm.uri.trim(),
+          note: evidenceForm.note.trim(),
+          createdAt: new Date().toISOString()
+        }
+      ]
+    }));
+    setEvidenceForm({ title: "", type: "BORDRO", uri: "", note: "" });
+  };
+
+  const pushEmployeeNotification = (
+    title: string,
+    message: string,
+    tone: AppData["employeePortal"]["notifications"][number]["tone"] = "INFO"
+  ) => {
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        notifications: [
+          {
+            id: `notification-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            title,
+            message,
+            tone,
+            read: false,
+            createdAt: new Date().toISOString()
+          },
+          ...prev.employeePortal.notifications
+        ].slice(0, 50)
+      }
+    }));
+  };
+
+  const addEmployeeRequest = () => {
+    const title = employeeRequestForm.title.trim() || EMPLOYEE_REQUEST_TYPE_OPTIONS.find((item) => item.value === employeeRequestForm.type)?.label || "Talep";
+    if (!employeeRequestForm.note.trim() && employeeRequestForm.type !== "ADVANCE") {
+      Alert.alert("Açıklama eksik", "Talebin değerlendirilebilmesi için kısa bir açıklama yazın.");
+      return;
+    }
+    const startDate = employeeRequestForm.startDate.trim();
+    const endDate = employeeRequestForm.endDate.trim();
+    if ((startDate && !isIsoDate(startDate)) || (endDate && !isIsoDate(endDate))) {
+      Alert.alert("Tarih hatalı", "Talep tarihlerini 2026-05-12 formatında girin.");
+      return;
+    }
+    if (startDate && endDate && endDate < startDate) {
+      Alert.alert("Tarih hatalı", "Bitiş tarihi başlangıç tarihinden önce olamaz.");
+      return;
+    }
+    const amount = safePositive(tryParseNumber(employeeRequestForm.amount));
+    const hours = safePositive(tryParseNumber(employeeRequestForm.hours));
+    if ((employeeRequestForm.type === "ADVANCE" || employeeRequestForm.type === "EXPENSE") && amount <= 0) {
+      Alert.alert("Tutar eksik", "Avans veya masraf talebi için tutar girin.");
+      return;
+    }
+    if (employeeRequestForm.type === "OVERTIME" && hours <= 0) {
+      Alert.alert("Saat eksik", "Mesai talebi için saat girin.");
+      return;
+    }
+    const now = new Date().toISOString();
+    const notification: EmployeeNotification = {
+      id: `notification-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: "Talep oluşturuldu",
+      message: `${title} talebi onay akışına alındı.`,
+      tone: "SUCCESS",
+      read: false,
+      createdAt: now
+    };
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        requests: [
+          {
+            id: `request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: employeeRequestForm.type,
+            status: "PENDING",
+            title,
+            startDate,
+            endDate,
+            amount,
+            hours,
+            note: employeeRequestForm.note.trim(),
+            managerNote: "",
+            createdAt: now,
+            updatedAt: now
+          },
+          ...prev.employeePortal.requests
+        ],
+        notifications: [notification, ...prev.employeePortal.notifications].slice(0, 50)
+      }
+    }));
+    setEmployeeRequestForm({ type: "LEAVE", title: "", startDate: "", endDate: "", amount: "", hours: "", note: "" });
+  };
+
+  const updateEmployeeRequestStatus = (id: string, status: EmployeeRequestStatus) => {
+    const target = appData.employeePortal.requests.find((item) => item.id === id);
+    const now = new Date().toISOString();
+    const notification: EmployeeNotification | null = target
+      ? {
+          id: `notification-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          title: "Talep durumu güncellendi",
+          message: `${target.title} için durum: ${EMPLOYEE_REQUEST_STATUS_LABELS[status]}.`,
+          tone: status === "APPROVED" ? "SUCCESS" : status === "REJECTED" ? "DANGER" : "INFO",
+          read: false,
+          createdAt: now
+        }
+      : null;
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        requests: prev.employeePortal.requests.map((item) =>
+          item.id === id ? { ...item, status, updatedAt: now } : item
+        ),
+        notifications: notification
+          ? [notification, ...prev.employeePortal.notifications].slice(0, 50)
+          : prev.employeePortal.notifications
+      }
+    }));
+  };
+
+  const setEmployeePortalField = (field: keyof Omit<AppData["employeePortal"], "requests" | "documents" | "notifications">, value: string) => {
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        [field]: field === "leaveBalanceDays" ? safePositive(tryParseNumber(value)) : value
+      }
+    }));
+  };
+
+  const addEmployeeDocument = () => {
+    if (!employeeDocumentForm.title.trim()) {
+      Alert.alert("Belge adı eksik", "Belge için başlık girin.");
+      return;
+    }
+    const now = new Date().toISOString();
+    const notification: EmployeeNotification = {
+      id: `notification-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: "Belge yüklendi",
+      message: `${employeeDocumentForm.title.trim()} personel dosyasına eklendi.`,
+      tone: "SUCCESS",
+      read: false,
+      createdAt: now
+    };
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        documents: [
+          ...prev.employeePortal.documents,
+          {
+            id: `employee-document-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            title: employeeDocumentForm.title.trim(),
+            type: employeeDocumentForm.type,
+            uri: employeeDocumentForm.uri.trim(),
+            note: employeeDocumentForm.note.trim(),
+            createdAt: now
+          }
+        ],
+        notifications: [notification, ...prev.employeePortal.notifications].slice(0, 50)
+      }
+    }));
+    setEmployeeDocumentForm({ title: "", type: "IDENTITY", uri: "", note: "" });
+  };
+
+  const pickEmployeeDocumentImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("İzin gerekli", "Belge fotoğrafı seçmek için galeri izni vermelisiniz.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.85
+      });
+      if (result.canceled || !result.assets[0]?.uri) {
+        return;
+      }
+      const sourceUri = result.assets[0].uri;
+      const extension = sourceUri.split(".").pop()?.split("?")[0] || "jpg";
+      const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || "";
+      if (!baseDir) {
+        setEmployeeDocumentForm((prev) => ({ ...prev, uri: sourceUri }));
+        return;
+      }
+      const targetDir = `${baseDir}employee-documents/`;
+      await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true }).catch(() => {});
+      const targetUri = `${targetDir}document-${Date.now()}.${extension}`;
+      await FileSystem.copyAsync({ from: sourceUri, to: targetUri }).catch(() => {});
+      setEmployeeDocumentForm((prev) => ({
+        ...prev,
+        title: prev.title.trim() || "Personel belgesi",
+        uri: targetUri
+      }));
+    } catch {
+      Alert.alert("Belge", "Belge seçilemedi. Lütfen tekrar deneyin.");
+    }
+  };
+
+  const deleteEmployeeDocument = (id: string) => {
+    const target = appData.employeePortal.documents.find((item) => item.id === id);
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        documents: prev.employeePortal.documents.filter((item) => item.id !== id)
+      }
+    }));
+    if (target?.uri && target.uri.startsWith(FileSystem.documentDirectory ?? "")) {
+      void FileSystem.deleteAsync(target.uri, { idempotent: true }).catch(() => {});
+    }
+  };
+
+  const markEmployeeNotificationsRead = () => {
+    setAppData((prev) => ({
+      ...prev,
+      employeePortal: {
+        ...prev.employeePortal,
+        notifications: prev.employeePortal.notifications.map((item) => ({ ...item, read: true }))
+      }
+    }));
+  };
+
+  const downloadEmployeePortalPdf = async () => {
+    const requests = employeeRequests
+      .map((item) => `${item.createdAt.slice(0, 10)} | ${item.title} | ${EMPLOYEE_REQUEST_STATUS_LABELS[item.status]} | ${item.note || "-"}`)
+      .join("\n");
+    const documents = appData.employeePortal.documents.map((item) => `${item.title} | ${item.type} | ${item.uri || "-"}`).join("\n");
+    const lines = [
+      `Çalışan: ${appData.profile.fullName || authUser?.username || "-"}`,
+      `Departman: ${appData.employeePortal.department || "-"}`,
+      `Pozisyon: ${appData.employeePortal.position || "-"}`,
+      `Telefon: ${appData.profile.phone || "-"}`,
+      `E-posta: ${appData.profile.email || "-"}`,
+      `IBAN: ${appData.employeePortal.iban || "-"}`,
+      `İzin bakiyesi: ${appData.employeePortal.leaveBalanceDays} gün`,
+      "",
+      "Bu Ay Bordro/Puantaj",
+      `Hak edilen toplam: ${formatCurrency(summary.expectedTotal)}`,
+      `Yatırılan toplam: ${formatCurrency(summary.paidTotal)}`,
+      `Fark: ${formatSignedCurrency(summary.difference)}`,
+      `Çalışılan gün: ${summary.workedDays}`,
+      `Yıllık izin: ${summary.annualLeaveDays}`,
+      `Rapor: ${summary.reportDays}`,
+      `Fazla mesai: ${summary.overtimeHours} saat`,
+      "",
+      "Talep Geçmişi",
+      requests || "Talep kaydı yok.",
+      "",
+      "Belge Arşivi",
+      documents || "Belge kaydı yok."
+    ];
+    const html = [
+      "<html lang=\"tr\"><head><meta charset=\"utf-8\" /></head><body style=\"font-family:Arial,sans-serif;padding:22px;color:#0f172a;\">",
+      "<h1>Personel Portalı Özeti</h1>",
+      "<pre style=\"white-space:pre-wrap;font-family:monospace;\">" + safeText(lines.join("\n")) + "</pre>",
+      "</body></html>"
+    ].join("");
+    await sharePdf(html, "Personel Portalı PDF", `personel-portali-${monthKey}.pdf`);
+  };
+
+  const pickEvidenceImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("İzin gerekli", "Belge fotoğrafı seçmek için galeri izni vermelisiniz.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.85
+      });
+
+      if (result.canceled || !result.assets[0]?.uri) {
+        return;
+      }
+
+      const sourceUri = result.assets[0].uri;
+      const extension = sourceUri.split(".").pop()?.split("?")[0] || "jpg";
+      const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || "";
+      if (!baseDir) {
+        setEvidenceForm((prev) => ({ ...prev, uri: sourceUri }));
+        return;
+      }
+      const targetDir = `${baseDir}evidence/`;
+      await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true }).catch(() => {});
+      const targetUri = `${targetDir}evidence-${monthKey}-${Date.now()}.${extension}`;
+      await FileSystem.copyAsync({ from: sourceUri, to: targetUri }).catch(() => {});
+      setEvidenceForm((prev) => ({
+        ...prev,
+        title: prev.title.trim() || "Belge fotoğrafı",
+        uri: targetUri
+      }));
+    } catch {
+      Alert.alert("Belge", "Belge fotoğrafı seçilemedi. Lütfen tekrar deneyin.");
+    }
+  };
+
+  const deleteEvidenceFile = (id: string) => {
+    const target = appData.evidenceFiles.find((item) => item.id === id);
+    setAppData((prev) => ({
+      ...prev,
+      evidenceFiles: prev.evidenceFiles.filter((item) => item.id !== id)
+    }));
+    if (target?.uri && target.uri.startsWith(FileSystem.documentDirectory ?? "")) {
+      void FileSystem.deleteAsync(target.uri, { idempotent: true }).catch(() => {});
+    }
+  };
+
+  const openEvidenceFile = async (uri: string) => {
+    if (!uri.trim()) {
+      return;
+    }
+    try {
+      const canOpen = await Linking.canOpenURL(uri);
+      if (canOpen) {
+        await Linking.openURL(uri);
+        return;
+      }
+      Alert.alert("Belge yolu", uri);
+    } catch {
+      Alert.alert("Belge yolu", uri);
+    }
   };
 
   const applyDayStatusToDates = (dateKeys: string[], status: DayStatus | null) => {
@@ -775,7 +1609,7 @@ function AppContent() {
             updatedAt: new Date().toISOString()
           };
         } else if (status === "WORKED") {
-          nextRecords[dateKey] = createWorkedRecord(dateKey, prev.settings, true);
+          nextRecords[dateKey] = createWorkedRecord(dateKey, effectiveSettings, true);
         } else {
           nextRecords[dateKey] = createStatusRecord(dateKey, status, true);
         }
@@ -896,26 +1730,214 @@ function AppContent() {
   };
 
   const setNumericSetting = (key: NumericSettingKey, raw: string) => {
+    const value = safePositive(tryParseNumber(raw));
     setAppData((prev) => ({
       ...prev,
       settings: {
         ...prev.settings,
-        [key]: safePositive(tryParseNumber(raw))
-      }
+        [key]: value
+      },
+      salaryHistory: prev.salaryHistory.map((entry) => {
+        const isActiveForMonth = entry.startMonth <= monthKey && (!entry.endMonth || entry.endMonth >= monthKey);
+        if (!isActiveForMonth) {
+          return entry;
+        }
+        if (
+          key === "monthlySalary" ||
+          key === "monthlyBaseHours" ||
+          key === "weeklyOvertimeThresholdHours" ||
+          key === "dailyOvertimeThresholdHours" ||
+          key === "monthlyMealAllowance" ||
+          key === "monthlyTransportAllowance"
+        ) {
+          return { ...entry, [key]: value };
+        }
+        return entry;
+      })
     }));
   };
 
-  const setCoefficient = (key: "overtime" | "sunday" | "holiday", raw: string) => {
+  const setCoefficient = (key: "overtime" | "sunday" | "holiday" | "ubgt", raw: string) => {
+    const value = safePositive(tryParseNumber(raw));
     setAppData((prev) => ({
       ...prev,
       settings: {
         ...prev.settings,
         coefficients: {
           ...prev.settings.coefficients,
-          [key]: safePositive(tryParseNumber(raw))
+          [key]: value
         }
-      }
+      },
+      salaryHistory: prev.salaryHistory.map((entry) => {
+        const isActiveForMonth = entry.startMonth <= monthKey && (!entry.endMonth || entry.endMonth >= monthKey);
+        if (!isActiveForMonth) {
+          return entry;
+        }
+        return {
+          ...entry,
+          coefficients: {
+            ...entry.coefficients,
+            [key]: value
+          }
+        };
+      })
     }));
+  };
+
+  const upsertCurrentMonthSalaryHistory = (
+    patch: Partial<Omit<SalaryHistoryEntry, "id" | "startMonth" | "endMonth">>
+  ) => {
+    setAppData((prev) => {
+      const existing = [...prev.salaryHistory]
+        .filter((entry) => entry.startMonth <= monthKey && (!entry.endMonth || entry.endMonth >= monthKey))
+        .sort((a, b) => b.startMonth.localeCompare(a.startMonth))[0];
+      const base: SalaryHistoryEntry =
+        existing ?? {
+          id: `salary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          startMonth: monthKey,
+          endMonth: "",
+          monthlySalary: effectiveSettings.monthlySalary,
+          monthlyBaseHours: effectiveSettings.monthlyBaseHours,
+          weeklyOvertimeThresholdHours: effectiveSettings.weeklyOvertimeThresholdHours,
+          dailyOvertimeThresholdHours: effectiveSettings.dailyOvertimeThresholdHours,
+          monthlyMealAllowance: effectiveSettings.monthlyMealAllowance,
+          monthlyTransportAllowance: effectiveSettings.monthlyTransportAllowance,
+          coefficients: { ...effectiveSettings.coefficients },
+          note: "Özet ekranından oluşturuldu"
+        };
+      const nextEntry = normalizeSalaryHistory(
+        [
+          {
+            ...base,
+            ...patch,
+            coefficients: {
+              ...base.coefficients,
+              ...patch.coefficients
+            }
+          }
+        ],
+        prev.settings
+      )[0];
+      return {
+        ...prev,
+        salaryHistory: [
+          ...prev.salaryHistory.filter((entry) => entry.id !== nextEntry.id),
+          nextEntry
+        ].sort((a, b) => a.startMonth.localeCompare(b.startMonth))
+      };
+    });
+  };
+
+  const setCurrentMonthSalaryNumber = (
+    key:
+      | "monthlySalary"
+      | "monthlyBaseHours"
+      | "weeklyOvertimeThresholdHours"
+      | "dailyOvertimeThresholdHours"
+      | "monthlyMealAllowance"
+      | "monthlyTransportAllowance",
+    raw: string
+  ) => {
+    upsertCurrentMonthSalaryHistory({ [key]: safePositive(tryParseNumber(raw)) });
+  };
+
+  const setCurrentMonthSalaryCoefficient = (key: "overtime" | "sunday" | "ubgt", raw: string) => {
+    upsertCurrentMonthSalaryHistory({
+      coefficients: {
+        ...effectiveSettings.coefficients,
+        [key]: safePositive(tryParseNumber(raw))
+      }
+    });
+  };
+
+  const resetSalaryHistoryForm = () => {
+    setSalaryHistoryEditingId(null);
+    setSalaryHistoryForm({
+      startMonth: monthKey,
+      endMonth: "",
+      monthlySalary: String(effectiveSettings.monthlySalary),
+      monthlyBaseHours: String(effectiveSettings.monthlyBaseHours),
+      weeklyOvertimeThresholdHours: String(effectiveSettings.weeklyOvertimeThresholdHours),
+      dailyOvertimeThresholdHours: String(effectiveSettings.dailyOvertimeThresholdHours),
+      monthlyMealAllowance: String(effectiveSettings.monthlyMealAllowance),
+      monthlyTransportAllowance: String(effectiveSettings.monthlyTransportAllowance),
+      overtimeCoefficient: String(effectiveSettings.coefficients.overtime),
+      sundayCoefficient: String(effectiveSettings.coefficients.sunday),
+      ubgtCoefficient: String(effectiveSettings.coefficients.ubgt),
+      note: ""
+    });
+  };
+
+  const editSalaryHistoryEntry = (entry: SalaryHistoryEntry) => {
+    setSalaryHistoryEditingId(entry.id);
+    setSalaryHistoryForm({
+      startMonth: entry.startMonth,
+      endMonth: entry.endMonth,
+      monthlySalary: String(entry.monthlySalary),
+      monthlyBaseHours: String(entry.monthlyBaseHours),
+      weeklyOvertimeThresholdHours: String(entry.weeklyOvertimeThresholdHours),
+      dailyOvertimeThresholdHours: String(entry.dailyOvertimeThresholdHours),
+      monthlyMealAllowance: String(entry.monthlyMealAllowance),
+      monthlyTransportAllowance: String(entry.monthlyTransportAllowance),
+      overtimeCoefficient: String(entry.coefficients.overtime),
+      sundayCoefficient: String(entry.coefficients.sunday),
+      ubgtCoefficient: String(entry.coefficients.ubgt),
+      note: entry.note
+    });
+  };
+
+  const saveSalaryHistoryEntry = () => {
+    if (!isMonthKey(salaryHistoryForm.startMonth) || (salaryHistoryForm.endMonth && !isMonthKey(salaryHistoryForm.endMonth))) {
+      Alert.alert("Dönem hatalı", "Başlangıç ve bitiş dönemi YYYY-MM formatında olmalıdır.");
+      return;
+    }
+    if (salaryHistoryForm.endMonth && salaryHistoryForm.endMonth < salaryHistoryForm.startMonth) {
+      Alert.alert("Dönem hatalı", "Bitiş dönemi başlangıçtan önce olamaz.");
+      return;
+    }
+
+    const entry = normalizeSalaryHistory(
+      [
+        {
+          id: salaryHistoryEditingId ?? `salary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          startMonth: salaryHistoryForm.startMonth,
+          endMonth: salaryHistoryForm.endMonth,
+          monthlySalary: safePositive(tryParseNumber(salaryHistoryForm.monthlySalary)),
+          monthlyBaseHours: safePositive(tryParseNumber(salaryHistoryForm.monthlyBaseHours)) || 225,
+          weeklyOvertimeThresholdHours: safePositive(tryParseNumber(salaryHistoryForm.weeklyOvertimeThresholdHours)) || 45,
+          dailyOvertimeThresholdHours: safePositive(tryParseNumber(salaryHistoryForm.dailyOvertimeThresholdHours)) || 7.5,
+          monthlyMealAllowance: safePositive(tryParseNumber(salaryHistoryForm.monthlyMealAllowance)),
+          monthlyTransportAllowance: safePositive(tryParseNumber(salaryHistoryForm.monthlyTransportAllowance)),
+          coefficients: {
+            overtime: safePositive(tryParseNumber(salaryHistoryForm.overtimeCoefficient)) || 1.5,
+            sunday: safePositive(tryParseNumber(salaryHistoryForm.sundayCoefficient)) || 1.5,
+            holiday: effectiveSettings.coefficients.holiday,
+            ubgt: safePositive(tryParseNumber(salaryHistoryForm.ubgtCoefficient)) || 1
+          },
+          note: salaryHistoryForm.note
+        }
+      ],
+      appData.settings
+    )[0];
+
+    setAppData((prev) => ({
+      ...prev,
+      salaryHistory: [
+        ...prev.salaryHistory.filter((item) => item.id !== entry.id),
+        entry
+      ].sort((a, b) => a.startMonth.localeCompare(b.startMonth))
+    }));
+    resetSalaryHistoryForm();
+  };
+
+  const deleteSalaryHistoryEntry = (id: string) => {
+    setAppData((prev) => ({
+      ...prev,
+      salaryHistory: prev.salaryHistory.filter((entry) => entry.id !== id)
+    }));
+    if (salaryHistoryEditingId === id) {
+      resetSalaryHistoryForm();
+    }
   };
 
   const setStringSetting = (key: "defaultShiftStart" | "defaultShiftEnd", value: string) => {
@@ -1103,7 +2125,7 @@ function AppContent() {
     ]);
   };
 
-  const loadUserWorkspace = async (user: AuthUser, source: "REMOTE" | "LOCAL") => {
+  const loadUserWorkspace = async (user: AuthUser, source: "REMOTE") => {
     const localData = await loadAppData(user.id);
     let merged = normalizeIncomingData(localData);
 
@@ -1225,6 +2247,12 @@ function AppContent() {
     setConsentYasalSorumluluk(false);
   };
 
+  const resetAuthSecurityForm = () => {
+    setAuthSecurityQuestion("");
+    setAuthSecurityAnswer("");
+    setAuthResetNewPassword("");
+  };
+
   const buildConsentPayload = () => ({
     kvkk: consentKvkk,
     acikRiza: consentAcikRiza,
@@ -1236,14 +2264,6 @@ function AppContent() {
     istegeBagliBildirim: false
   });
 
-  const loginLocalWithRoleFallback = async (): Promise<AuthUser> => {
-    try {
-      return await localLoginUser(authUsername, authPassword, "USER");
-    } catch {
-      return localLoginUser(authUsername, authPassword, "ADMIN");
-    }
-  };
-
   const handleLogin = async () => {
     if (!authUsername.trim() || !authPassword.trim()) {
       setAuthError("Kullanıcı adı ve şifre zorunludur.");
@@ -1253,17 +2273,8 @@ function AppContent() {
     setAuthBusy(true);
     setAuthError("");
     try {
-      let user: AuthUser;
-      let source: "REMOTE" | "LOCAL" = "REMOTE";
-
-      if (backendConnected) {
-        user = await remoteLogin(authUsername, authPassword);
-      } else {
-        user = await loginLocalWithRoleFallback();
-        source = "LOCAL";
-      }
-
-      await loadUserWorkspace(user, source);
+      const user = await remoteLogin(authUsername, authPassword);
+      await loadUserWorkspace(user, "REMOTE");
       await reportClientSecurity();
       setAuthPassword("");
       setAuthInviteKey("");
@@ -1272,22 +2283,6 @@ function AppContent() {
         await refreshAdminStats();
       }
     } catch (error) {
-      if (backendConnected) {
-        try {
-          const localUser = await loginLocalWithRoleFallback();
-          await loadUserWorkspace(localUser, "LOCAL");
-          await reportClientSecurity();
-          setAuthPassword("");
-          setAuthInviteKey("");
-          if (localUser.role === "ADMIN") {
-            await refreshAdminUsers();
-            await refreshAdminStats();
-          }
-          return;
-        } catch {
-          // Tercih edilen hata, çevrimiçi girişten döner.
-        }
-      }
       setAuthError(sanitizeUserMessage(error, "Giriş yapılamadı."));
     } finally {
       setAuthBusy(false);
@@ -1299,6 +2294,10 @@ function AppContent() {
       setAuthError("Kullanıcı adı, şifre ve kayıt anahtarı zorunludur.");
       return;
     }
+    if (!authSecurityQuestion.trim() || !authSecurityAnswer.trim()) {
+      setAuthError("Güvenlik sorusu ve cevabı zorunludur.");
+      return;
+    }
 
     if (!allRequiredConsentsAccepted) {
       setAuthError("Zorunlu onaylar tamamlanmadan kayıt yapılamaz.");
@@ -1308,46 +2307,23 @@ function AppContent() {
     setAuthBusy(true);
     setAuthError("");
     try {
-      let user: AuthUser;
-      let source: "REMOTE" | "LOCAL" = "REMOTE";
       const payload = {
         username: authUsername,
         password: authPassword,
         inviteKey: authInviteKey,
+        securityQuestion: authSecurityQuestion,
+        securityAnswer: authSecurityAnswer,
         consents: buildConsentPayload()
       };
 
-      if (backendConnected) {
-        user = await remoteRegister(payload);
-      } else {
-        user = await localRegisterUser(payload);
-        source = "LOCAL";
-      }
-
-      await loadUserWorkspace(user, source);
+      const user = await remoteRegister(payload);
+      await loadUserWorkspace(user, "REMOTE");
       await reportClientSecurity();
       setAuthInviteKey("");
       setAuthPassword("");
+      resetAuthSecurityForm();
       resetConsentForm();
     } catch (error) {
-      if (backendConnected) {
-        try {
-          const localUser = await localRegisterUser({
-            username: authUsername,
-            password: authPassword,
-            inviteKey: authInviteKey,
-            consents: buildConsentPayload()
-          });
-          await loadUserWorkspace(localUser, "LOCAL");
-          await reportClientSecurity();
-          setAuthInviteKey("");
-          setAuthPassword("");
-          resetConsentForm();
-          return;
-        } catch {
-          // Tercih edilen hata, çevrimiçi kayıttan döner.
-        }
-      }
       setAuthError(sanitizeUserMessage(error, "Kayıt işlemi tamamlanamadı."));
     } finally {
       setAuthBusy(false);
@@ -1355,15 +2331,12 @@ function AppContent() {
   };
 
   const handleLogout = async () => {
-    if (authSource === "REMOTE") {
-      await remoteLogout().catch(() => {});
-    } else {
-      await localLogoutUser().catch(() => {});
-    }
+    await remoteLogout().catch(() => {});
     setAuthUser(null);
     setAuthSource(null);
     setAuthPassword("");
     setAuthInviteKey("");
+    resetAuthSecurityForm();
     resetConsentForm();
     setAppData(DEFAULT_DATA);
     setAdminUsers([]);
@@ -1374,6 +2347,79 @@ function AppContent() {
     setAdminIpReason("Güvenlik ihlali");
     setAdminBanDurationHours("");
     setDrawerVisible(false);
+  };
+
+  const handleLoadSecurityQuestion = async () => {
+    if (!authUsername.trim()) {
+      setAuthError("Önce kullanıcı adını girin.");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const question = await remoteGetSecurityQuestion(authUsername);
+      setAuthSecurityQuestion(question);
+    } catch (error) {
+      setAuthError(sanitizeUserMessage(error, "Güvenlik sorusu alınamadı."));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!authUsername.trim() || !authSecurityAnswer.trim() || !authResetNewPassword.trim()) {
+      setAuthError("Kullanıcı adı, güvenlik cevabı ve yeni şifre zorunludur.");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      await remoteResetPasswordWithSecurityAnswer({
+        username: authUsername,
+        securityAnswer: authSecurityAnswer,
+        newPassword: authResetNewPassword
+      });
+      setAuthMode("USER_LOGIN");
+      setAuthPassword("");
+      resetAuthSecurityForm();
+      setAuthError("Şifre başarıyla yenilendi. Yeni şifrenizle giriş yapabilirsiniz.");
+    } catch (error) {
+      setAuthError(sanitizeUserMessage(error, "Şifre sıfırlanamadı."));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleDeleteOwnAccount = () => {
+    if (!authUser || authUser.role !== "USER") {
+      return;
+    }
+    if (!deleteAccountPassword.trim() || !deleteAccountSecurityAnswer.trim()) {
+      Alert.alert("Eksik Bilgi", "Şifre ve güvenlik cevabı zorunludur.");
+      return;
+    }
+    Alert.alert("Hesabı Sil", "Bu işlem geri alınamaz. Devam etmek istiyor musunuz?", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Evet, Sil",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              await remoteDeleteOwnAccount({
+                password: deleteAccountPassword,
+                securityAnswer: deleteAccountSecurityAnswer
+              });
+              setDeleteAccountPassword("");
+              setDeleteAccountSecurityAnswer("");
+              await handleLogout();
+            } catch (error) {
+              Alert.alert("Hata", sanitizeUserMessage(error, "Hesap silinemedi."));
+            }
+          })();
+        }
+      }
+    ]);
   };
 
   const refreshAdminUsers = async () => {
@@ -1431,6 +2477,29 @@ function AppContent() {
     } finally {
       setAdminBusy(false);
     }
+  };
+
+  const confirmPurgeUsers = () => {
+    Alert.alert(
+      "Tüm kullanıcılar temizlensin mi?",
+      "Bu işlem admin hesaplarını korur; normal kullanıcıları, oturumlarını ve puantaj verilerini kalıcı olarak siler.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Kullanıcıları Temizle",
+          style: "destructive",
+          onPress: () =>
+            void runAdminAction(async () => {
+              const result = await adminPurgeUsers();
+              setAdminSelectedUser(null);
+              Alert.alert(
+                "Temizleme tamamlandı",
+                `${result.deletedUsers} kullanıcı silindi. ${result.protectedAdmins} admin hesabı korundu.`
+              );
+            })
+        }
+      ]
+    );
   };
 
   useEffect(() => {
@@ -1526,14 +2595,14 @@ function AppContent() {
       const dayType = dayTypeOf(dateKey, appData.holidayDates, appData.halfHolidayDates);
       const workText =
         record.status === "WORKED"
-          ? `${record.work?.start ?? appData.settings.defaultShiftStart}-${record.work?.end ?? appData.settings.defaultShiftEnd}`
+          ? `${record.work?.start ?? effectiveSettings.defaultShiftStart}-${record.work?.end ?? effectiveSettings.defaultShiftEnd}`
           : "-";
       const totalHours =
-        record.status === "WORKED" ? `${round2(record.work?.totalHours ?? appData.settings.defaultShiftHours)}` : "0";
-      const workHours = record.work?.totalHours ?? appData.settings.defaultShiftHours;
+        record.status === "WORKED" ? `${round2(record.work?.totalHours ?? effectiveSettings.defaultShiftHours)}` : "0";
+      const workHours = record.work?.totalHours ?? effectiveSettings.defaultShiftHours;
       const overtimeHours =
         record.status === "WORKED"
-          ? `${calculateDailyOvertimeHours(workHours, appData.settings, record.work?.manualOvertimeOverrideHours)}`
+          ? `${calculateDailyOvertimeHours(workHours, effectiveSettings, record.work?.manualOvertimeOverrideHours)}`
           : "0";
       const benefitEligible = isMealTransportEligible(dateKey, dayType, record.status, appData.halfHolidayDates) ? "Evet" : "Hayır";
       rows.push({
@@ -1649,6 +2718,85 @@ function AppContent() {
     await sharePdf(html, "Gün Gün Detay PDF", `gun-gun-detay-${monthKey}.pdf`);
   };
 
+  const downloadWorkerClaimFilePdf = async () => {
+    const dayRows = buildDayRowsForMonth();
+    const rowHtml = (label: string, value: string) =>
+      `<tr><th>${safeText(label)}</th><td>${safeText(value)}</td></tr>`;
+    const paymentRows = currentMonthTransactions
+      .map(
+        (item) =>
+          `<tr><td>${safeText(item.date)}</td><td>${safeText(item.kind)}</td><td>${safeText(formatCurrency(item.amount))}</td><td>${safeText(item.description || "-")}</td></tr>`
+      )
+      .join("");
+    const evidenceRows = currentMonthEvidence
+      .map(
+        (item) =>
+          `<tr><td>${safeText(item.title)}</td><td>${safeText(item.type)}</td><td>${safeText(item.uri || "-")}</td><td>${safeText(item.note || "-")}</td></tr>`
+      )
+      .join("");
+    const dayTableRows = dayRows
+      .map(
+        (row) =>
+          `<tr><td>${safeText(row.dateLabel)}</td><td>${safeText(row.dayType)}</td><td>${safeText(row.status)}</td><td>${safeText(row.workText)}</td><td>${safeText(row.totalHours)}</td><td>${safeText(row.overtimeHours)}</td><td>${safeText(row.benefitEligible)}</td><td>${safeText(row.note || "-")}</td></tr>`
+      )
+      .join("");
+    const statementDifference = summary.statementTotal > 0 ? summary.statementTotal - summary.expectedTotal : 0;
+    const html = [
+      "<html lang=\"tr\"><head><meta charset=\"utf-8\" />",
+      "<style>",
+      "body{font-family:Arial,sans-serif;color:#0f172a;padding:22px;line-height:1.45}",
+      "h1{font-size:24px;margin:0 0 4px} h2{font-size:17px;margin:22px 0 8px;color:#0f766e}",
+      "p{margin:4px 0} table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}",
+      "th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;vertical-align:top} th{background:#f1f5f9}",
+      ".note{font-size:11px;color:#475569;margin-top:18px}.total{font-weight:700;color:#b91c1c}",
+      "</style></head><body>",
+      "<h1>Puantaj Maaş İşçi Alacağı Dosyası</h1>",
+      `<p><strong>Ay:</strong> ${safeText(monthLabelTr(monthKey))} (${safeText(monthKey)})</p>`,
+      `<p><strong>Kullanıcı:</strong> ${safeText(authUser?.username ?? "-")}</p>`,
+      `<p><strong>Hesap dönemi:</strong> ${safeText(periodText)}</p>`,
+      "<h2>Hak Ediş Özeti</h2>",
+      "<table>",
+      rowHtml("Net maaş / dönem hak edişi", formatCurrency(summary.baseSalary)),
+      rowHtml("Normal çalışma saati", `${summary.totalHours - summary.overtimeHours} saat`),
+      rowHtml("Toplam fiili saat", `${summary.totalHours} saat`),
+      rowHtml("Fazla mesai saati", `${summary.overtimeHours} saat`),
+      rowHtml("Pazar çalışma saati/günü", `${summary.sundayWorkedDays} gün`),
+      rowHtml("UBGT günü", `${summary.ubgtWorkedDays} gün`),
+      rowHtml("Gece çalışma saati", `${summary.nightHours} saat`),
+      rowHtml("Fazla mesai ücreti", formatCurrency(summary.overtimePay)),
+      rowHtml("Pazar ücreti", formatCurrency(summary.sundayPay)),
+      rowHtml("UBGT ücreti", formatCurrency(summary.ubgtPay)),
+      rowHtml("Gece primi", formatCurrency(summary.nightPremiumPay)),
+      rowHtml("Yemek + yol", formatCurrency(summary.sideBenefitsTotal)),
+      rowHtml("Toplam hak ediş", formatCurrency(summary.expectedTotal)),
+      rowHtml("Yatırılan toplam", formatCurrency(summary.paidTotal)),
+      rowHtml("Eksik / fazla fark", formatSignedCurrency(summary.difference)),
+      "</table>",
+      "<h2>Bordro Karşılaştırması</h2>",
+      "<table>",
+      rowHtml("Bordro toplamı", formatCurrency(summary.statementTotal)),
+      rowHtml("Gerçek hak ediş", formatCurrency(summary.expectedTotal)),
+      rowHtml("Bordro farkı", summary.statementTotal > 0 ? formatSignedCurrency(statementDifference) : "Bordro girilmedi"),
+      rowHtml("Bordro notu", currentMonthStatement?.note || "-"),
+      "</table>",
+      "<h2>Ödeme Hareketleri</h2>",
+      "<table><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Açıklama</th></tr>",
+      paymentRows || "<tr><td colspan=\"4\">Ödeme hareketi yok.</td></tr>",
+      "</table>",
+      "<h2>Gün Gün Puantaj</h2>",
+      "<table><tr><th>Tarih</th><th>Gün tipi</th><th>Durum</th><th>Saat</th><th>Toplam</th><th>Mesai</th><th>Yemek/Yol</th><th>Not</th></tr>",
+      dayTableRows || "<tr><td colspan=\"8\">Puantaj kaydı yok.</td></tr>",
+      "</table>",
+      "<h2>Delil / Belge Listesi</h2>",
+      "<table><tr><th>Başlık</th><th>Tip</th><th>Dosya/Yol</th><th>Not</th></tr>",
+      evidenceRows || "<tr><td colspan=\"4\">Belge kaydı yok.</td></tr>",
+      "</table>",
+      `<p class="note">${safeText("Bu rapor ön hesaplama amaçlıdır. Kesin sonuç için bordro, banka dekontu, SGK kaydı ve uzman/bilirkişi incelemesi gerekir.")}</p>`,
+      "</body></html>"
+    ].join("");
+    await sharePdf(html, "İşçi Alacağı Dosyası PDF", `isci-alacagi-dosyasi-${monthKey}.pdf`);
+  };
+
   const downloadLegalCalculationPdf = async () => {
     const dateTag = normalizedDateTag(appData.legal.hireDate, monthKey);
     const html = [
@@ -1710,6 +2858,7 @@ function AppContent() {
         >
           <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
             <View style={styles.authHeroCard}>
+              <Image source={APP_LOGO} style={styles.authLogo} resizeMode="contain" />
               <Text style={styles.authBadge}>AYFSOFT</Text>
               <Text style={styles.authTitle}>Puantaj ve Maaş Takip</Text>
               <Text style={styles.authSubtitle}>
@@ -1735,6 +2884,8 @@ function AppContent() {
             </View>
 
             <View style={styles.authFormCard}>
+              <LanguageSelector />
+
               <View style={styles.authModeRow}>
                 <Pressable
                   style={[styles.authModeButton, authMode === "USER_LOGIN" ? styles.authModeButtonActive : null]}
@@ -1754,6 +2905,16 @@ function AppContent() {
                     style={[styles.authModeButtonText, authMode === "USER_REGISTER" ? styles.authModeButtonTextActive : null]}
                   >
                     Kayıt Ol
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.authModeButton, authMode === "FORGOT_PASSWORD" ? styles.authModeButtonActive : null]}
+                  onPress={() => setAuthMode("FORGOT_PASSWORD")}
+                >
+                  <Text
+                    style={[styles.authModeButtonText, authMode === "FORGOT_PASSWORD" ? styles.authModeButtonTextActive : null]}
+                  >
+                    Şifremi Unuttum
                   </Text>
                 </Pressable>
               </View>
@@ -1817,6 +2978,65 @@ function AppContent() {
               />
 
               {authMode === "USER_REGISTER" ? (
+                <>
+                  <Text style={styles.label}>Güvenlik sorusu</Text>
+                  <TextInput
+                    value={authSecurityQuestion}
+                    onChangeText={(value) => {
+                      setAuthSecurityQuestion(value);
+                      clearAuthError();
+                    }}
+                    style={styles.input}
+                    placeholder="Örn: İlk okul öğretmeninizin adı?"
+                  />
+                  <Text style={styles.label}>Güvenlik cevabı</Text>
+                  <TextInput
+                    value={authSecurityAnswer}
+                    onChangeText={(value) => {
+                      setAuthSecurityAnswer(value);
+                      clearAuthError();
+                    }}
+                    style={styles.input}
+                    placeholder="Cevabınızı girin"
+                  />
+                </>
+              ) : null}
+
+              {authMode === "FORGOT_PASSWORD" ? (
+                <>
+                  <Pressable style={styles.secondaryButton} onPress={handleLoadSecurityQuestion} disabled={authBusy}>
+                    <Text style={styles.secondaryButtonText}>Güvenlik Sorusunu Getir</Text>
+                  </Pressable>
+                  {authSecurityQuestion.trim() ? (
+                    <View style={styles.summaryCard}>
+                      <InfoRow label="Güvenlik sorusu" value={authSecurityQuestion} />
+                    </View>
+                  ) : null}
+                  <Text style={styles.label}>Güvenlik cevabı</Text>
+                  <TextInput
+                    value={authSecurityAnswer}
+                    onChangeText={(value) => {
+                      setAuthSecurityAnswer(value);
+                      clearAuthError();
+                    }}
+                    style={styles.input}
+                    placeholder="Cevabınızı yazın"
+                  />
+                  <Text style={styles.label}>Yeni şifre</Text>
+                  <TextInput
+                    value={authResetNewPassword}
+                    onChangeText={(value) => {
+                      setAuthResetNewPassword(value);
+                      clearAuthError();
+                    }}
+                    secureTextEntry
+                    style={styles.input}
+                    placeholder="Yeni şifre"
+                  />
+                </>
+              ) : null}
+
+              {authMode === "USER_REGISTER" ? (
                 <View style={styles.summaryCard}>
                   <Text style={styles.label}>Zorunlu onaylar</Text>
                   <ConsentCheck
@@ -1857,6 +3077,10 @@ function AppContent() {
               {authMode === "USER_REGISTER" ? (
                 <Pressable style={styles.primaryButton} onPress={handleRegister} disabled={authBusy}>
                   <Text style={styles.primaryButtonText}>{authBusy ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Text>
+                </Pressable>
+              ) : authMode === "FORGOT_PASSWORD" ? (
+                <Pressable style={styles.primaryButton} onPress={handleResetPassword} disabled={authBusy}>
+                  <Text style={styles.primaryButtonText}>{authBusy ? "Sıfırlanıyor..." : "Şifreyi Yenile"}</Text>
                 </Pressable>
               ) : (
                 <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={authBusy}>
@@ -1908,6 +3132,7 @@ return (
           <Pressable style={styles.menuButton} onPress={openDrawer}>
             <Text style={styles.menuButtonText}>☰</Text>
           </Pressable>
+          <Image source={APP_LOGO} style={styles.headerLogo} resizeMode="contain" />
           <Text style={styles.title}>Puantaj Maaş Hesap</Text>
         </View>
         <Text style={styles.subtitle}>Takvim, dönem özeti ve hukuki bilgilendirme tek ekranda.</Text>
@@ -1950,6 +3175,21 @@ return (
             </View>
 
             {isMonthClosed ? <Text style={styles.closedBadge}>Bu ay kapalı, değişiklik yapılamaz.</Text> : null}
+
+            <SummaryCard title="Ay Kontrolü">
+              <InfoRow label="Dolu puantaj günü" value={`${summary.workedDays + summary.leaveDays + summary.annualLeaveDays + summary.reportDays + summary.holidayOffDays}`} />
+              <InfoRow label="Eksik / boş gün" value={`${currentMonthMissingDays.length}`} valueColor={currentMonthMissingDays.length > 0 ? "#f59e0b" : "#22c55e"} strong />
+              <InfoRow label="Belge kaydı" value={`${currentMonthEvidence.length}`} />
+              <InfoRow label="Ödeme hareketi" value={`${currentMonthTransactions.length}`} />
+              {currentMonthMissingDays.length > 0 ? (
+                <Text style={styles.helper}>
+                  İlk eksik günler: {currentMonthMissingDays.slice(0, 6).map(formatDateKeyTr).join(", ")}
+                  {currentMonthMissingDays.length > 6 ? "..." : ""}
+                </Text>
+              ) : (
+                <Text style={styles.helper}>Bu ayın tüm günleri işaretlenmiş görünüyor.</Text>
+              )}
+            </SummaryCard>
 
             <SummaryCard title="Toplu İşlem">
               <InfoRow label="Seçili gün sayısı" value={`${bulkRangeDateKeys.length}`} />
@@ -2063,7 +3303,7 @@ return (
 
                         <Text numberOfLines={1} style={[styles.dayTime, isWorked ? null : styles.dimText]}>
                           {isWorked
-                            ? shortShiftLabel(record?.work?.start ?? appData.settings.defaultShiftStart, record?.work?.end ?? appData.settings.defaultShiftEnd)
+                            ? shortShiftLabel(record?.work?.start ?? effectiveSettings.defaultShiftStart, record?.work?.end ?? effectiveSettings.defaultShiftEnd)
                             : ""}
                         </Text>
 
@@ -2093,6 +3333,18 @@ return (
             {analytics.salaryWarning ? <Text style={styles.error}>{analytics.salaryWarning}</Text> : null}
 
             <View style={styles.optionWrap}>
+              <Pressable
+                style={styles.primaryButton}
+                onPress={() => {
+                  void persistUserDataNow().catch((error) => {
+                    Alert.alert("Hata", error instanceof Error ? error.message : "Kaydetme işlemi başarısız.");
+                  });
+                }}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {language === "th" ? "บันทึกการเปลี่ยนแปลง" : "Değişiklikleri Kaydet"}
+                </Text>
+              </Pressable>
               <Pressable style={styles.secondaryButton} onPress={downloadSalarySummaryPdf}>
                 <Text style={styles.secondaryButtonText}>Maaş Özeti PDF</Text>
               </Pressable>
@@ -2102,7 +3354,80 @@ return (
               <Pressable style={styles.secondaryButton} onPress={downloadDailyDetailPdf}>
                 <Text style={styles.secondaryButtonText}>Gün Gün Detay PDF</Text>
               </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={downloadWorkerClaimFilePdf}>
+                <Text style={styles.secondaryButtonText}>İşçi Alacağı Dosyası PDF</Text>
+              </Pressable>
             </View>
+
+            <SummaryCard title="Hızlı Maaş / Yan Hak Girişi">
+              <Text style={styles.helper}>
+                Bu alanlar kullanıcıya açıktır. Maaş, yemek, yol, saat ve katsayı değişince hesaplama anında güncellenir.
+              </Text>
+              <InfoRow
+                label="Bu ay kullanılan dönem"
+                value={
+                  activeSalaryHistoryEntry
+                    ? `${activeSalaryHistoryEntry.startMonth} - ${activeSalaryHistoryEntry.endMonth || "devam"}`
+                    : "Genel varsayılan"
+                }
+              />
+
+              <Text style={styles.label}>Aylık net maaş</Text>
+              <NumericInput
+                value={effectiveSettings.monthlySalary}
+                onCommit={(value) => setCurrentMonthSalaryNumber("monthlySalary", value)}
+              />
+
+              <Text style={styles.label}>Aylık yemek parası</Text>
+              <NumericInput
+                value={effectiveSettings.monthlyMealAllowance}
+                onCommit={(value) => setCurrentMonthSalaryNumber("monthlyMealAllowance", value)}
+              />
+
+              <Text style={styles.label}>Aylık yol parası</Text>
+              <NumericInput
+                value={effectiveSettings.monthlyTransportAllowance}
+                onCommit={(value) => setCurrentMonthSalaryNumber("monthlyTransportAllowance", value)}
+              />
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Aylık normal saat</Text>
+                  <NumericInput
+                    value={effectiveSettings.monthlyBaseHours}
+                    onCommit={(value) => setCurrentMonthSalaryNumber("monthlyBaseHours", value)}
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Haftalık yasal saat</Text>
+                  <NumericInput
+                    value={effectiveSettings.weeklyOvertimeThresholdHours}
+                    onCommit={(value) => setCurrentMonthSalaryNumber("weeklyOvertimeThresholdHours", value)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Mesai katsayısı</Text>
+                  <NumericInput
+                    value={effectiveSettings.coefficients.overtime}
+                    onCommit={(value) => setCurrentMonthSalaryCoefficient("overtime", value)}
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Pazar katsayısı</Text>
+                  <NumericInput
+                    value={effectiveSettings.coefficients.sunday}
+                    onCommit={(value) => setCurrentMonthSalaryCoefficient("sunday", value)}
+                  />
+                </View>
+              </View>
+
+              <Pressable style={styles.secondaryButton} onPress={() => setActiveTab("SETTINGS")}>
+                <Text style={styles.secondaryButtonText}>Tüm Hesap Ayarlarını Aç</Text>
+              </Pressable>
+            </SummaryCard>
 
             <SummaryCard title="Dönemler">
               <InfoRow label="Hesap dönemi" value={periodText} />
@@ -2124,6 +3449,7 @@ return (
               <InfoRow label="Pazar gün" value={`${summary.sundayWorkedDays}`} />
               <InfoRow label="UBGT gün" value={`${summary.ubgtWorkedDays}`} />
               <InfoRow label="Toplam çalışma saati" value={`${summary.totalHours} saat`} />
+              <InfoRow label="Gece çalışma saati" value={`${summary.nightHours} saat`} />
               <InfoRow label="Günlük 7.5 saat aşımı" value={`${summary.dailyOvertimeHours} saat`} />
               <InfoRow label="Haftalık 45 saat aşımı" value={`${summary.weeklyOvertimeRawHours} saat`} />
               <InfoRow label="Haftalık ilave mesai" value={`${summary.weeklyAdditionalOvertimeHours} saat`} />
@@ -2135,12 +3461,13 @@ return (
 
             <SummaryCard title="Hak Ediş">
               <InfoRow label="Saatlik ücret" value={formatCurrency(summary.hourlyRate)} />
-              <InfoRow label="Fazla mesai katsayısı" value={`${appData.settings.coefficients.overtime}`} />
+              <InfoRow label="Fazla mesai katsayısı" value={`${effectiveSettings.coefficients.overtime}`} />
               <InfoRow label="Maaş hak edişi" value={formatCurrency(summary.baseSalary)} />
               <InfoRow label="Dönem kesintisi" value={formatCurrency(summary.reportDeduction)} />
               <InfoRow label="Mesai hak edişi" value={formatCurrency(summary.overtimePay)} />
               <InfoRow label="Pazar hak edişi" value={formatCurrency(summary.sundayPay)} />
               <InfoRow label="UBGT hak edişi" value={formatCurrency(summary.ubgtPay)} />
+              <InfoRow label="Gece primi" value={formatCurrency(summary.nightPremiumPay)} />
             </SummaryCard>
 
             <SummaryCard title="Yemek / Yol">
@@ -2162,7 +3489,9 @@ return (
               <TextInput
                 value={paymentInputs.salary}
                 onChangeText={(value) => updateMonthPaymentInput("salary", value)}
-                keyboardType="numeric"
+                onFocus={() => setFocusedPaymentField("salary")}
+                onBlur={() => commitMonthPayment()}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
                 style={[styles.input, isMonthClosed ? styles.inputDisabled : null]}
                 editable={!isMonthClosed}
               />
@@ -2171,7 +3500,9 @@ return (
               <TextInput
                 value={paymentInputs.overtime}
                 onChangeText={(value) => updateMonthPaymentInput("overtime", value)}
-                keyboardType="numeric"
+                onFocus={() => setFocusedPaymentField("overtime")}
+                onBlur={() => commitMonthPayment()}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
                 style={[styles.input, isMonthClosed ? styles.inputDisabled : null]}
                 editable={!isMonthClosed}
               />
@@ -2180,7 +3511,9 @@ return (
               <TextInput
                 value={paymentInputs.sunday}
                 onChangeText={(value) => updateMonthPaymentInput("sunday", value)}
-                keyboardType="numeric"
+                onFocus={() => setFocusedPaymentField("sunday")}
+                onBlur={() => commitMonthPayment()}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
                 style={[styles.input, isMonthClosed ? styles.inputDisabled : null]}
                 editable={!isMonthClosed}
               />
@@ -2189,7 +3522,9 @@ return (
               <TextInput
                 value={paymentInputs.ubgt}
                 onChangeText={(value) => updateMonthPaymentInput("ubgt", value)}
-                keyboardType="numeric"
+                onFocus={() => setFocusedPaymentField("ubgt")}
+                onBlur={() => commitMonthPayment()}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
                 style={[styles.input, isMonthClosed ? styles.inputDisabled : null]}
                 editable={!isMonthClosed}
               />
@@ -2198,7 +3533,9 @@ return (
               <TextInput
                 value={paymentInputs.meal}
                 onChangeText={(value) => updateMonthPaymentInput("meal", value)}
-                keyboardType="numeric"
+                onFocus={() => setFocusedPaymentField("meal")}
+                onBlur={() => commitMonthPayment()}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
                 style={[styles.input, isMonthClosed ? styles.inputDisabled : null]}
                 editable={!isMonthClosed}
               />
@@ -2207,7 +3544,9 @@ return (
               <TextInput
                 value={paymentInputs.transport}
                 onChangeText={(value) => updateMonthPaymentInput("transport", value)}
-                keyboardType="numeric"
+                onFocus={() => setFocusedPaymentField("transport")}
+                onBlur={() => commitMonthPayment()}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
                 style={[styles.input, isMonthClosed ? styles.inputDisabled : null]}
                 editable={!isMonthClosed}
               />
@@ -2221,6 +3560,7 @@ return (
               </Pressable>
 
               <InfoRow label="Toplam hak ediş" value={formatCurrency(summary.expectedTotal)} strong />
+              <InfoRow label="Ödeme geçmişi toplamı" value={formatCurrency(summary.transactionPaidTotal)} />
               <InfoRow label="Yatırılan toplam" value={formatCurrency(summary.paidTotal)} strong />
               <InfoRow
                 label="Fark"
@@ -2228,6 +3568,121 @@ return (
                 strong
                 valueColor={differenceColor(summary.difference)}
               />
+            </SummaryCard>
+
+            <SummaryCard title="Ödeme Geçmişi">
+              <Text style={styles.helper}>Banka, elden, avans, muhasebeci veya farklı kişi ödemelerini tarih tarih girin.</Text>
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Tarih</Text>
+                  <TextInput value={paymentForm.date} onChangeText={(value) => setPaymentForm((prev) => ({ ...prev, date: value }))} style={styles.input} placeholder={`${monthKey}-01`} />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Tutar</Text>
+                  <TextInput value={paymentForm.amount} onChangeText={(value) => setPaymentForm((prev) => ({ ...prev, amount: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} />
+                </View>
+              </View>
+              <Text style={styles.label}>Ödeme türü</Text>
+              <View style={styles.optionWrap}>
+                {[
+                  ["BANK", "Banka"],
+                  ["CASH", "Elden"],
+                  ["ADVANCE", "Avans"],
+                  ["ACCOUNTANT", "Muhasebeci"],
+                  ["OTHER_PERSON", "Başka kişi"],
+                  ["OTHER", "Diğer"]
+                ].map(([value, label]) => (
+                  <Pressable key={value} style={[styles.optionButton, paymentForm.kind === value ? styles.optionButtonActive : null]} onPress={() => setPaymentForm((prev) => ({ ...prev, kind: value }))}>
+                    <Text style={[styles.optionButtonText, paymentForm.kind === value ? styles.optionButtonTextActive : null]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.label}>Açıklama</Text>
+              <TextInput value={paymentForm.description} onChangeText={(value) => setPaymentForm((prev) => ({ ...prev, description: value }))} style={styles.input} />
+              <Pressable style={styles.secondaryButton} onPress={addPaymentTransaction}>
+                <Text style={styles.secondaryButtonText}>Ödeme Ekle</Text>
+              </Pressable>
+              {currentMonthTransactions.map((item) => (
+                <View key={item.id} style={styles.historyItem}>
+                  <InfoRow label={`${item.date} | ${item.kind}`} value={formatCurrency(item.amount)} strong />
+                  {item.description ? <Text style={styles.helper}>{item.description}</Text> : null}
+                  <Pressable style={styles.deleteButton} onPress={() => deletePaymentTransaction(item.id)}>
+                    <Text style={styles.deleteButtonText}>Sil</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </SummaryCard>
+
+            <SummaryCard title="Bordro Karşılaştırma">
+              <Text style={styles.helper}>Bordroda görünen tutarları girin; uygulama gerçek hak ediş ile farkı gösterir.</Text>
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}><Text style={styles.label}>Bordro net maaş</Text><TextInput value={statementForm.bordroNetSalary} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, bordroNetSalary: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+                <View style={styles.gridField}><Text style={styles.label}>Bordro mesai</Text><TextInput value={statementForm.bordroOvertime} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, bordroOvertime: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+              </View>
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}><Text style={styles.label}>Bordro Pazar</Text><TextInput value={statementForm.bordroSunday} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, bordroSunday: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+                <View style={styles.gridField}><Text style={styles.label}>Bordro UBGT</Text><TextInput value={statementForm.bordroUbgt} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, bordroUbgt: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+              </View>
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}><Text style={styles.label}>Bordro yemek</Text><TextInput value={statementForm.bordroMeal} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, bordroMeal: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+                <View style={styles.gridField}><Text style={styles.label}>Bordro yol</Text><TextInput value={statementForm.bordroTransport} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, bordroTransport: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+              </View>
+              <Text style={styles.label}>Not</Text>
+              <TextInput value={statementForm.note} onChangeText={(value) => setStatementForm((prev) => ({ ...prev, note: value }))} style={styles.input} />
+              <Pressable style={styles.secondaryButton} onPress={savePayrollStatement}>
+                <Text style={styles.secondaryButtonText}>Bordro Bilgisini Kaydet</Text>
+              </Pressable>
+              <InfoRow label="Bordro toplamı" value={formatCurrency(summary.statementTotal)} />
+              <InfoRow label="Gerçek hak ediş" value={formatCurrency(summary.expectedTotal)} />
+              <InfoRow label="Bordro farkı" value={formatSignedCurrency(summary.statementTotal - summary.expectedTotal)} valueColor={differenceColor(summary.statementTotal - summary.expectedTotal)} strong />
+              {currentMonthStatement?.note ? <Text style={styles.helper}>{currentMonthStatement.note}</Text> : null}
+            </SummaryCard>
+
+            <SummaryCard title="Delil / Belge Dosyası">
+              <Text style={styles.helper}>Bordro, dekont, WhatsApp veya vardiya çizelgesi bağlantı/notlarını ay bazında tutun.</Text>
+              <Text style={styles.label}>Belge tipi</Text>
+              <View style={styles.optionWrap}>
+                {EVIDENCE_TYPE_OPTIONS.map(({ value, label }) => (
+                  <Pressable
+                    key={value}
+                    style={[styles.optionButton, evidenceForm.type === value ? styles.optionButtonActive : null]}
+                    onPress={() => setEvidenceForm((prev) => ({ ...prev, type: value }))}
+                  >
+                    <Text style={[styles.optionButtonText, evidenceForm.type === value ? styles.optionButtonTextActive : null]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.label}>Başlık</Text>
+              <TextInput value={evidenceForm.title} onChangeText={(value) => setEvidenceForm((prev) => ({ ...prev, title: value }))} style={styles.input} />
+              <Text style={styles.label}>Belge yolu / açıklama</Text>
+              <TextInput value={evidenceForm.uri} onChangeText={(value) => setEvidenceForm((prev) => ({ ...prev, uri: value }))} style={styles.input} placeholder="Dosya yolu veya kısa açıklama" />
+              <Pressable style={styles.secondaryButton} onPress={pickEvidenceImage}>
+                <Text style={styles.secondaryButtonText}>Galeriden Fotoğraf Seç</Text>
+              </Pressable>
+              {evidenceForm.uri.startsWith("file:") ? <Image source={{ uri: evidenceForm.uri }} style={styles.evidencePreview} resizeMode="cover" /> : null}
+              <Text style={styles.label}>Not</Text>
+              <TextInput value={evidenceForm.note} onChangeText={(value) => setEvidenceForm((prev) => ({ ...prev, note: value }))} style={styles.input} />
+              <Pressable style={styles.secondaryButton} onPress={addEvidenceFile}>
+                <Text style={styles.secondaryButtonText}>Belge Kaydı Ekle</Text>
+              </Pressable>
+              {currentMonthEvidence.map((item) => (
+                <View key={item.id} style={styles.historyItem}>
+                  <InfoRow label={item.title} value={item.type} strong />
+                  {item.uri.startsWith("file:") ? <Image source={{ uri: item.uri }} style={styles.evidencePreview} resizeMode="cover" /> : null}
+                  {item.uri ? <Text style={styles.helper}>{item.uri}</Text> : null}
+                  {item.note ? <Text style={styles.helper}>{item.note}</Text> : null}
+                  <View style={styles.optionWrap}>
+                    {item.uri ? (
+                      <Pressable style={styles.optionButton} onPress={() => void openEvidenceFile(item.uri)}>
+                        <Text style={styles.optionButtonText}>Aç</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable style={styles.optionButton} onPress={() => deleteEvidenceFile(item.id)}>
+                      <Text style={styles.optionButtonText}>Sil</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
             </SummaryCard>
 
             <SummaryCard title="Toplam Alacak / Borç">
@@ -2275,6 +3730,234 @@ return (
               <InfoRow label="İzin oranı" value={`%${analytics.leaveRatePercent}`} />
             </SummaryCard>
 
+          </View>
+        ) : null}
+
+        {activeTab === "EMPLOYEE" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Personel Portalı</Text>
+            <Text style={styles.helper}>Bordro, puantaj, izin, avans, mesai, belge ve bildirimlerin tek ekranda.</Text>
+
+            <View style={styles.portalHero}>
+              {appData.profile.avatarUrl.trim() ? (
+                <Image source={{ uri: appData.profile.avatarUrl.trim() }} style={styles.portalAvatar} />
+              ) : (
+                <View style={styles.portalAvatarFallback}>
+                  <Text style={styles.portalAvatarText}>{profileInitials(appData.profile.fullName, authUser.username)}</Text>
+                </View>
+              )}
+              <View style={styles.portalHeroText}>
+                <Text style={styles.portalName}>{appData.profile.fullName || authUser.username}</Text>
+                <Text style={styles.helper}>{appData.employeePortal.position || "Pozisyon girilmedi"} • {appData.employeePortal.department || "Departman girilmedi"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.kpiGrid}>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiValue}>{formatCurrency(summary.expectedTotal)}</Text>
+                <Text style={styles.kpiLabel}>Bu ay hak ediş</Text>
+              </View>
+              <View style={styles.kpiTile}>
+                <Text style={[styles.kpiValue, { color: differenceColor(summary.difference) }]}>{formatSignedCurrency(summary.difference)}</Text>
+                <Text style={styles.kpiLabel}>Bordro/ödeme farkı</Text>
+              </View>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiValue}>{summary.overtimeHours} sa</Text>
+                <Text style={styles.kpiLabel}>Fazla mesai</Text>
+              </View>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiValue}>{appData.employeePortal.leaveBalanceDays} gün</Text>
+                <Text style={styles.kpiLabel}>İzin bakiyesi</Text>
+              </View>
+            </View>
+
+            <SummaryCard title="Kontrol Merkezi">
+              {employeeHealthChecks.map((item) => (
+                <InfoRow
+                  key={item.label}
+                  label={item.label}
+                  value={item.value}
+                  strong
+                  valueColor={item.tone === "OK" ? "#22c55e" : item.tone === "WARN" ? "#fbbf24" : "#f87171"}
+                />
+              ))}
+              {analytics.salaryWarning ? <Text style={styles.error}>{analytics.salaryWarning}</Text> : null}
+              <Text style={styles.helper}>
+                Hesaplamalar bu ayın puantajı, ödeme kayıtları, ücret geçmişi ve yan hak ayarlarına göre üretilir.
+              </Text>
+            </SummaryCard>
+
+            <SummaryCard title="Bordro ve Puantaj">
+              <InfoRow label="Çalışılan gün" value={`${summary.workedDays}`} />
+              <InfoRow label="Yıllık izin / rapor" value={`${summary.annualLeaveDays} / ${summary.reportDays}`} />
+              <InfoRow label="Yemek + yol" value={formatCurrency(summary.sideBenefitsTotal)} />
+              <InfoRow label="Yatırılan toplam" value={formatCurrency(summary.paidTotal)} />
+              <View style={styles.optionWrap}>
+                <Pressable style={styles.secondaryButton} onPress={downloadSalarySummaryPdf}>
+                  <Text style={styles.secondaryButtonText}>Bordro PDF</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={downloadPuantajSummaryPdf}>
+                  <Text style={styles.secondaryButtonText}>Puantaj PDF</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={downloadEmployeePortalPdf}>
+                  <Text style={styles.secondaryButtonText}>Personel Özeti PDF</Text>
+                </Pressable>
+              </View>
+            </SummaryCard>
+
+            <SummaryCard title="Yeni Talep">
+              <Text style={styles.label}>Talep tipi</Text>
+              <View style={styles.optionWrap}>
+                {EMPLOYEE_REQUEST_TYPE_OPTIONS.map(({ value, label }) => (
+                  <Pressable
+                    key={value}
+                    style={[styles.optionButton, employeeRequestForm.type === value ? styles.optionButtonActive : null]}
+                    onPress={() => setEmployeeRequestForm((prev) => ({ ...prev, type: value }))}
+                  >
+                    <Text style={[styles.optionButtonText, employeeRequestForm.type === value ? styles.optionButtonTextActive : null]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.label}>Başlık</Text>
+              <TextInput value={employeeRequestForm.title} onChangeText={(value) => setEmployeeRequestForm((prev) => ({ ...prev, title: value }))} style={styles.input} placeholder="Örn: 2 günlük yıllık izin" />
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Başlangıç</Text>
+                  <TextInput value={employeeRequestForm.startDate} onChangeText={(value) => setEmployeeRequestForm((prev) => ({ ...prev, startDate: value }))} style={styles.input} placeholder="2026-05-10" />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Bitiş</Text>
+                  <TextInput value={employeeRequestForm.endDate} onChangeText={(value) => setEmployeeRequestForm((prev) => ({ ...prev, endDate: value }))} style={styles.input} placeholder="2026-05-12" />
+                </View>
+              </View>
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Tutar</Text>
+                  <TextInput value={employeeRequestForm.amount} onChangeText={(value) => setEmployeeRequestForm((prev) => ({ ...prev, amount: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} placeholder="Avans/masraf" />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Saat</Text>
+                  <TextInput value={employeeRequestForm.hours} onChangeText={(value) => setEmployeeRequestForm((prev) => ({ ...prev, hours: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} placeholder="Mesai saati" />
+                </View>
+              </View>
+              <Text style={styles.label}>Açıklama</Text>
+              <TextInput value={employeeRequestForm.note} onChangeText={(value) => setEmployeeRequestForm((prev) => ({ ...prev, note: value }))} style={[styles.input, { minHeight: 74, textAlignVertical: "top" }]} multiline />
+              <Pressable style={styles.primaryButton} onPress={addEmployeeRequest}>
+                <Text style={styles.primaryButtonText}>Talep Oluştur</Text>
+              </Pressable>
+            </SummaryCard>
+
+            <SummaryCard title="Talep Geçmişi">
+              {employeeRequests.length === 0 ? <Text style={styles.helper}>Henüz talep kaydı yok.</Text> : null}
+              {employeeRequests.map((item) => (
+                <View key={item.id} style={styles.historyItem}>
+                  <InfoRow label={item.title} value={EMPLOYEE_REQUEST_STATUS_LABELS[item.status]} strong valueColor={item.status === "APPROVED" ? "#22c55e" : item.status === "REJECTED" ? "#f87171" : "#fbbf24"} />
+                  <Text style={styles.helper}>{item.createdAt.slice(0, 10)} • {EMPLOYEE_REQUEST_TYPE_OPTIONS.find((option) => option.value === item.type)?.label}</Text>
+                  {item.startDate || item.endDate ? <Text style={styles.helper}>Tarih: {item.startDate || "-"} / {item.endDate || "-"}</Text> : null}
+                  {item.amount > 0 ? <Text style={styles.helper}>Tutar: {formatCurrency(item.amount)}</Text> : null}
+                  {item.hours > 0 ? <Text style={styles.helper}>Saat: {item.hours}</Text> : null}
+                  {item.note ? <Text style={styles.helper}>{item.note}</Text> : null}
+                  <View style={styles.optionWrap}>
+                    <Pressable style={styles.optionButton} onPress={() => updateEmployeeRequestStatus(item.id, "APPROVED")}>
+                      <Text style={styles.optionButtonText}>Onayla</Text>
+                    </Pressable>
+                    <Pressable style={styles.optionButton} onPress={() => updateEmployeeRequestStatus(item.id, "REJECTED")}>
+                      <Text style={styles.optionButtonText}>Reddet</Text>
+                    </Pressable>
+                    <Pressable style={styles.optionButton} onPress={() => updateEmployeeRequestStatus(item.id, "CANCELLED")}>
+                      <Text style={styles.optionButtonText}>İptal</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </SummaryCard>
+
+            <SummaryCard title="Profil, IBAN ve Acil Kişi">
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Departman</Text>
+                  <TextInput value={appData.employeePortal.department} onChangeText={(value) => setEmployeePortalField("department", value)} style={styles.input} />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Pozisyon</Text>
+                  <TextInput value={appData.employeePortal.position} onChangeText={(value) => setEmployeePortalField("position", value)} style={styles.input} />
+                </View>
+              </View>
+              <Text style={styles.label}>IBAN</Text>
+              <TextInput value={appData.employeePortal.iban} onChangeText={(value) => setEmployeePortalField("iban", value)} style={styles.input} autoCapitalize="characters" />
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Acil kişi</Text>
+                  <TextInput value={appData.employeePortal.emergencyContactName} onChangeText={(value) => setEmployeePortalField("emergencyContactName", value)} style={styles.input} />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Acil telefon</Text>
+                  <TextInput value={appData.employeePortal.emergencyContactPhone} onChangeText={(value) => setEmployeePortalField("emergencyContactPhone", value)} style={styles.input} keyboardType="phone-pad" />
+                </View>
+              </View>
+              <Text style={styles.label}>İzin bakiyesi</Text>
+              <TextInput value={String(appData.employeePortal.leaveBalanceDays)} onChangeText={(value) => setEmployeePortalField("leaveBalanceDays", value)} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} />
+            </SummaryCard>
+
+            <SummaryCard title="Belge Arşivi">
+              <Text style={styles.label}>Belge tipi</Text>
+              <View style={styles.optionWrap}>
+                {EMPLOYEE_DOCUMENT_TYPE_OPTIONS.map(({ value, label }) => (
+                  <Pressable
+                    key={value}
+                    style={[styles.optionButton, employeeDocumentForm.type === value ? styles.optionButtonActive : null]}
+                    onPress={() => setEmployeeDocumentForm((prev) => ({ ...prev, type: value }))}
+                  >
+                    <Text style={[styles.optionButtonText, employeeDocumentForm.type === value ? styles.optionButtonTextActive : null]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.label}>Başlık</Text>
+              <TextInput value={employeeDocumentForm.title} onChangeText={(value) => setEmployeeDocumentForm((prev) => ({ ...prev, title: value }))} style={styles.input} />
+              <Text style={styles.label}>Dosya yolu / açıklama</Text>
+              <TextInput value={employeeDocumentForm.uri} onChangeText={(value) => setEmployeeDocumentForm((prev) => ({ ...prev, uri: value }))} style={styles.input} />
+              <Pressable style={styles.secondaryButton} onPress={pickEmployeeDocumentImage}>
+                <Text style={styles.secondaryButtonText}>Galeriden Belge Seç</Text>
+              </Pressable>
+              {employeeDocumentForm.uri.startsWith("file:") ? <Image source={{ uri: employeeDocumentForm.uri }} style={styles.evidencePreview} resizeMode="cover" /> : null}
+              <Text style={styles.label}>Not</Text>
+              <TextInput value={employeeDocumentForm.note} onChangeText={(value) => setEmployeeDocumentForm((prev) => ({ ...prev, note: value }))} style={styles.input} />
+              <Pressable style={styles.secondaryButton} onPress={addEmployeeDocument}>
+                <Text style={styles.secondaryButtonText}>Belge Ekle</Text>
+              </Pressable>
+              {appData.employeePortal.documents.map((item) => (
+                <View key={item.id} style={styles.historyItem}>
+                  <InfoRow label={item.title} value={EMPLOYEE_DOCUMENT_TYPE_OPTIONS.find((option) => option.value === item.type)?.label ?? item.type} strong />
+                  {item.uri.startsWith("file:") ? <Image source={{ uri: item.uri }} style={styles.evidencePreview} resizeMode="cover" /> : null}
+                  {item.uri ? <Text style={styles.helper}>{item.uri}</Text> : null}
+                  {item.note ? <Text style={styles.helper}>{item.note}</Text> : null}
+                  <View style={styles.optionWrap}>
+                    {item.uri ? (
+                      <Pressable style={styles.optionButton} onPress={() => void openEvidenceFile(item.uri)}>
+                        <Text style={styles.optionButtonText}>Aç</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable style={styles.optionButton} onPress={() => deleteEmployeeDocument(item.id)}>
+                      <Text style={styles.optionButtonText}>Sil</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </SummaryCard>
+
+            <SummaryCard title={`Bildirimler${unreadEmployeeNotifications ? ` (${unreadEmployeeNotifications})` : ""}`}>
+              <Pressable style={styles.secondaryButton} onPress={markEmployeeNotificationsRead}>
+                <Text style={styles.secondaryButtonText}>Tümünü Okundu Yap</Text>
+              </Pressable>
+              {appData.employeePortal.notifications.length === 0 ? <Text style={styles.helper}>Bildirim yok.</Text> : null}
+              {appData.employeePortal.notifications.slice(0, 8).map((item) => (
+                <View key={item.id} style={[styles.notificationItem, item.read ? null : styles.notificationUnread]}>
+                  <Text style={styles.notificationTitle}>{item.title}</Text>
+                  <Text style={styles.helper}>{item.message}</Text>
+                  <Text style={styles.helper}>{item.createdAt.slice(0, 10)}</Text>
+                </View>
+              ))}
+            </SummaryCard>
           </View>
         ) : null}
 
@@ -2370,6 +4053,28 @@ return (
               <Text style={styles.helper}>
                 Hesabınız bu cihazda güvenli şekilde tutulur. Çıkış yaptığınızda oturum kapatılır.
               </Text>
+              {authUser.role === "USER" ? (
+                <>
+                  <Text style={styles.label}>Hesap silme için şifre</Text>
+                  <TextInput
+                    value={deleteAccountPassword}
+                    onChangeText={setDeleteAccountPassword}
+                    style={styles.input}
+                    secureTextEntry
+                    placeholder="Şifrenizi girin"
+                  />
+                  <Text style={styles.label}>Hesap silme için güvenlik cevabı</Text>
+                  <TextInput
+                    value={deleteAccountSecurityAnswer}
+                    onChangeText={setDeleteAccountSecurityAnswer}
+                    style={styles.input}
+                    placeholder="Güvenlik cevabı"
+                  />
+                  <Pressable style={styles.deleteButton} onPress={handleDeleteOwnAccount}>
+                    <Text style={styles.deleteButtonText}>Hesabı Sil</Text>
+                  </Pressable>
+                </>
+              ) : null}
               <Pressable style={styles.deleteButton} onPress={handleLogout}>
                 <Text style={styles.deleteButtonText}>Çıkış Yap</Text>
               </Pressable>
@@ -2408,9 +4113,206 @@ return (
           </View>
         ) : null}
 
-        {activeTab === "SETTINGS" && authUser.role === "ADMIN" ? (
+        {activeTab === "SETTINGS" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Özel Ayarlar</Text>
+            <Text style={styles.sectionTitle}>Maaş ve Hesap Ayarları</Text>
+            <Text style={styles.helper}>
+              Maaş, yan hak, saat eşiği ve katsayıları buradan değiştirin. Değişiklikler bu kullanıcının hesaplamalarına uygulanır.
+            </Text>
+
+            <SummaryCard title="Maaş Geçmişi">
+              <Text style={styles.helper}>
+                Geçmiş yıllar ve aylar için maaş dönemleri tanımlayın. Hesaplama seçili aya göre doğru maaşı otomatik kullanır.
+              </Text>
+              <InfoRow
+                label="Seçili ayda kullanılan"
+                value={
+                  activeSalaryHistoryEntry
+                    ? `${activeSalaryHistoryEntry.startMonth} - ${activeSalaryHistoryEntry.endMonth || "devam"}`
+                    : "Genel varsayılan ayarlar"
+                }
+              />
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Başlangıç ayı</Text>
+                  <TextInput
+                    value={salaryHistoryForm.startMonth}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, startMonth: value }))}
+                    style={styles.input}
+                    placeholder="2025-01"
+                    autoCapitalize="none"
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Bitiş ayı</Text>
+                  <TextInput
+                    value={salaryHistoryForm.endMonth}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, endMonth: value }))}
+                    style={styles.input}
+                    placeholder="Boşsa devam eder"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Net maaş</Text>
+                  <TextInput
+                    value={salaryHistoryForm.monthlySalary}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, monthlySalary: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Aylık normal saat</Text>
+                  <TextInput
+                    value={salaryHistoryForm.monthlyBaseHours}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, monthlyBaseHours: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Yemek</Text>
+                  <TextInput
+                    value={salaryHistoryForm.monthlyMealAllowance}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, monthlyMealAllowance: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Yol</Text>
+                  <TextInput
+                    value={salaryHistoryForm.monthlyTransportAllowance}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, monthlyTransportAllowance: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Haftalık yasal saat</Text>
+                  <TextInput
+                    value={salaryHistoryForm.weeklyOvertimeThresholdHours}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, weeklyOvertimeThresholdHours: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Günlük mesai eşiği</Text>
+                  <TextInput
+                    value={salaryHistoryForm.dailyOvertimeThresholdHours}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, dailyOvertimeThresholdHours: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Mesai katsayısı</Text>
+                  <TextInput
+                    value={salaryHistoryForm.overtimeCoefficient}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, overtimeCoefficient: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+                <View style={styles.gridField}>
+                  <Text style={styles.label}>Pazar katsayısı</Text>
+                  <TextInput
+                    value={salaryHistoryForm.sundayCoefficient}
+                    onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, sundayCoefficient: value }))}
+                    style={styles.input}
+                    keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.label}>UBGT katsayısı</Text>
+              <TextInput
+                value={salaryHistoryForm.ubgtCoefficient}
+                onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, ubgtCoefficient: value }))}
+                style={styles.input}
+                keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
+              />
+
+              <Text style={styles.label}>Not</Text>
+              <TextInput
+                value={salaryHistoryForm.note}
+                onChangeText={(value) => setSalaryHistoryForm((prev) => ({ ...prev, note: value }))}
+                style={styles.input}
+                placeholder="Örn: 2025 zam dönemi"
+              />
+
+              <View style={styles.row}>
+                <Pressable style={styles.secondaryButton} onPress={saveSalaryHistoryEntry}>
+                  <Text style={styles.secondaryButtonText}>{salaryHistoryEditingId ? "Dönemi Güncelle" : "Dönem Ekle"}</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={resetSalaryHistoryForm}>
+                  <Text style={styles.secondaryButtonText}>Formu Temizle</Text>
+                </Pressable>
+              </View>
+
+              {appData.salaryHistory.length === 0 ? (
+                <Text style={styles.helper}>Henüz maaş geçmişi yok. İlk dönem kaydını ekleyin.</Text>
+              ) : null}
+              {appData.salaryHistory.map((entry) => (
+                <View key={entry.id} style={styles.historyItem}>
+                  <InfoRow label="Dönem" value={`${entry.startMonth} - ${entry.endMonth || "devam"}`} strong />
+                  <InfoRow label="Maaş" value={formatCurrency(entry.monthlySalary)} />
+                  <InfoRow label="Yemek / Yol" value={`${formatCurrency(entry.monthlyMealAllowance)} / ${formatCurrency(entry.monthlyTransportAllowance)}`} />
+                  <InfoRow label="Saat / Katsayı" value={`${entry.monthlyBaseHours} saat | FM ${entry.coefficients.overtime} | Pazar ${entry.coefficients.sunday} | UBGT ${entry.coefficients.ubgt}`} />
+                  {entry.note ? <Text style={styles.helper}>{entry.note}</Text> : null}
+                  <View style={styles.row}>
+                    <Pressable style={styles.secondaryButton} onPress={() => editSalaryHistoryEntry(entry)}>
+                      <Text style={styles.secondaryButtonText}>Düzenle</Text>
+                    </Pressable>
+                    <Pressable style={styles.deleteButton} onPress={() => deleteSalaryHistoryEntry(entry.id)}>
+                      <Text style={styles.deleteButtonText}>Sil</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </SummaryCard>
+
+            <SummaryCard title="Vardiya Şablonları">
+              <Text style={styles.helper}>Sık kullanılan vardiyaları kaydedin, takvimde güne tek dokunuşla uygulayın.</Text>
+              <Text style={styles.label}>Şablon adı</Text>
+              <TextInput value={shiftTemplateForm.name} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, name: value }))} style={styles.input} placeholder="Örn: 12 saat gece" />
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}><Text style={styles.label}>Başlangıç</Text><TextInput value={shiftTemplateForm.start} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, start: value }))} style={styles.input} placeholder="20:00" /></View>
+                <View style={styles.gridField}><Text style={styles.label}>Bitiş</Text><TextInput value={shiftTemplateForm.end} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, end: value }))} style={styles.input} placeholder="08:00" /></View>
+              </View>
+              <View style={styles.twoColumnGrid}>
+                <View style={styles.gridField}><Text style={styles.label}>Toplam saat</Text><TextInput value={shiftTemplateForm.totalHours} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, totalHours: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+                <View style={styles.gridField}><Text style={styles.label}>Mola dakika</Text><TextInput value={shiftTemplateForm.breakMinutes} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, breakMinutes: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} /></View>
+              </View>
+              <Text style={styles.label}>Manuel mesai saat</Text>
+              <TextInput value={shiftTemplateForm.manualOvertimeHours} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, manualOvertimeHours: value }))} style={styles.input} keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"} />
+              <Text style={styles.label}>Not</Text>
+              <TextInput value={shiftTemplateForm.note} onChangeText={(value) => setShiftTemplateForm((prev) => ({ ...prev, note: value }))} style={styles.input} />
+              <Pressable style={styles.secondaryButton} onPress={addShiftTemplate}>
+                <Text style={styles.secondaryButtonText}>Şablon Ekle</Text>
+              </Pressable>
+              {appData.shiftTemplates.map((item) => (
+                <View key={item.id} style={styles.historyItem}>
+                  <InfoRow label={item.name} value={`${item.start}-${item.end} | ${item.totalHours} saat`} strong />
+                  <InfoRow label="Mola / Mesai" value={`${item.breakMinutes} dk / ${item.manualOvertimeHours} saat`} />
+                </View>
+              ))}
+            </SummaryCard>
 
             <Text style={styles.label}>Bordro baz aylık ücret</Text>
             <NumericInput
@@ -2450,8 +4352,15 @@ return (
 
             <Text style={styles.label}>UBGT katsayısı</Text>
             <NumericInput
-              value={appData.settings.coefficients.holiday}
-              onCommit={(value) => setCoefficient("holiday", value)}
+              value={appData.settings.coefficients.ubgt}
+              onCommit={(value) => setCoefficient("ubgt", value)}
+            />
+
+            <Text style={styles.label}>Gece zammı oranı</Text>
+            <NumericInput
+              value={appData.settings.nightPremiumRate}
+              onCommit={(value) => setNumericSetting("nightPremiumRate", value)}
+              placeholder="0.25"
             />
 
             <Text style={styles.label}>Varsayılan vardiya başlangıcı</Text>
@@ -2644,6 +4553,13 @@ return (
               <InfoRow label="Toplam kullanıcı" value={`${adminStats?.totalUsers ?? 0}`} />
               <InfoRow label="Aktif kullanıcı" value={`${adminStats?.activeUsers ?? 0}`} />
               <InfoRow label="Banlı kullanıcı" value={`${adminStats?.bannedUsers ?? 0}`} />
+              <Pressable
+                style={styles.deleteButton}
+                onPress={confirmPurgeUsers}
+                disabled={adminBusy}
+              >
+                <Text style={styles.deleteButtonText}>Tüm Normal Kullanıcıları Temizle</Text>
+              </Pressable>
               {(adminStats?.recentLogins ?? []).map((item) => (
                 <InfoRow
                   key={item.id}
@@ -2683,8 +4599,10 @@ return (
                     label="Son giriş"
                     value={item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString("tr-TR") : "-"}
                   />
+                  <InfoRow label="Kayıt tarihi" value={new Date(item.createdAt).toLocaleString("tr-TR")} />
                   <InfoRow label="Son IP" value={item.lastIp ?? "-"} />
                   <InfoRow label="Cihaz" value={item.deviceInfo ?? "-"} />
+                  <InfoRow label="Hatalı giriş" value={`${item.failedLoginCount ?? 0}`} />
                 </Pressable>
               ))}
             </SummaryCard>
@@ -3025,16 +4943,16 @@ return (
               <Text style={styles.drawerItemText}>Özet</Text>
             </Pressable>
 
-            {authUser.role === "ADMIN" ? (
-              <>
-                <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SETTINGS")}>
-                  <Text style={styles.drawerItemText}>Özel Ayarlar</Text>
-                </Pressable>
-                <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SYNC")}>
-                  <Text style={styles.drawerItemText}>Senkronizasyon</Text>
-                </Pressable>
-              </>
-            ) : null}
+            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("EMPLOYEE")}>
+              <Text style={styles.drawerItemText}>Personel Portalı</Text>
+            </Pressable>
+
+            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SETTINGS")}>
+              <Text style={styles.drawerItemText}>Maaş ve Hesap</Text>
+            </Pressable>
+            <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("SYNC")}>
+              <Text style={styles.drawerItemText}>Senkronizasyon</Text>
+            </Pressable>
 
             <Pressable style={styles.drawerItem} onPress={() => selectDrawerTab("LEGAL")}>
               <Text style={styles.drawerItemText}>Hukuk</Text>
@@ -3081,6 +4999,27 @@ return (
 
             {selectedDayRecord?.status === "WORKED" ? (
               <View style={styles.workInfoBox}>
+                <Text style={styles.label}>Vardiya şablonu</Text>
+                <View style={styles.optionWrap}>
+                  {appData.shiftTemplates.map((template) => (
+                    <Pressable
+                      key={template.id}
+                      style={styles.optionButton}
+                      onPress={() => {
+                        setDayEditStart(template.start);
+                        setDayEditEnd(template.end);
+                        setDayEditTotalHours(String(template.totalHours));
+                        setDayEditBreakMinutes(String(template.breakMinutes));
+                        setDayEditManualOvertime(template.manualOvertimeHours ? String(template.manualOvertimeHours) : "");
+                        setDayEditNote(template.note);
+                        applyShiftTemplateToSelectedDay(template);
+                      }}
+                      disabled={isMonthClosed}
+                    >
+                      <Text style={styles.optionButtonText}>{template.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
                 <Text style={styles.label}>Başlangıç saati</Text>
                 <TextInput value={dayEditStart} onChangeText={setDayEditStart} style={styles.input} editable={!isMonthClosed} keyboardType="visible-password" placeholder="20:00" />
                 <Text style={styles.label}>Bitiş saati</Text>
@@ -3209,16 +5148,26 @@ function NumericInput(props: {
   };
 
   const commit = () => {
-    const normalized = text.trim().replace(",", ".");
-    if (!normalized) {
+    const raw = text.trim();
+    if (!raw) {
+      props.onCommit("0");
+      setText("0");
+      setError("");
       return;
     }
-    if (!/^\d+(\.\d+)?$/.test(normalized)) {
+    if (!/^[\d\s.,:-]+$/.test(raw)) {
       setError("Geçerli sayı girin.");
       return;
     }
+    const parsed = tryParseNumber(raw);
+    if (!Number.isFinite(parsed)) {
+      setError("Geçerli sayı girin.");
+      return;
+    }
+    const normalized = String(parsed);
     props.onCommit(normalized);
     setText(normalized);
+    setError("");
   };
 
   const appendToken = (token: string) => {
@@ -3237,6 +5186,8 @@ function NumericInput(props: {
         value={text}
         onChangeText={updateText}
         onBlur={commit}
+        onEndEditing={commit}
+        onSubmitEditing={commit}
         keyboardType={Platform.OS === "android" ? "visible-password" : "decimal-pad"}
         style={[styles.input, props.style, props.disabled ? styles.inputDisabled : null]}
         placeholder={props.placeholder}
@@ -3320,6 +5271,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700"
   },
+  headerLogo: {
+    width: 34,
+    height: 34,
+    borderRadius: 8
+  },
   title: {
     fontSize: 19,
     fontWeight: "800",
@@ -3366,6 +5322,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     gap: 8
+  },
+  authLogo: {
+    width: 86,
+    height: 86,
+    alignSelf: "center",
+    marginBottom: 2
   },
   authBadge: {
     alignSelf: "flex-start",
@@ -3651,6 +5613,90 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#e2e8f0"
   },
+  portalHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#14532d",
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#052e2b"
+  },
+  portalAvatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1,
+    borderColor: "#2dd4bf",
+    backgroundColor: "#0b1220"
+  },
+  portalAvatarFallback: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1,
+    borderColor: "#2dd4bf",
+    backgroundColor: "#0f766e",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  portalAvatarText: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  portalHeroText: {
+    flex: 1,
+    gap: 3
+  },
+  portalName: {
+    color: "#f8fafc",
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  kpiGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  kpiTile: {
+    flex: 1,
+    minWidth: 145,
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: "#111827"
+  },
+  kpiValue: {
+    color: "#f8fafc",
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  kpiLabel: {
+    marginTop: 4,
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  notificationItem: {
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 10,
+    padding: 9,
+    gap: 4,
+    backgroundColor: "#111827"
+  },
+  notificationUnread: {
+    borderColor: "#0f766e",
+    backgroundColor: "#0b3f3a"
+  },
+  notificationTitle: {
+    color: "#f8fafc",
+    fontSize: 13,
+    fontWeight: "800"
+  },
   adminSessionRow: {
     gap: 6,
     borderWidth: 1,
@@ -3686,6 +5732,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
     color: "#ffffff"
+  },
+  evidencePreview: {
+    width: "100%",
+    height: 150,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#334155",
+    backgroundColor: "#111827"
   },
   brandTitle: {
     fontSize: 26,
@@ -3746,6 +5800,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
     flexWrap: "wrap"
+  },
+  twoColumnGrid: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap"
+  },
+  gridField: {
+    flex: 1,
+    minWidth: 150
+  },
+  historyItem: {
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+    backgroundColor: "#0f172a"
   },
   flexInput: {
     flex: 1
@@ -4032,7 +6103,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#b91c1c",
     fontWeight: "700"
+  },
+  languageSelector: {
+    marginBottom: 20,
+  },
+  languageButton: {
+    backgroundColor: "#1e293b",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  languageButtonText: {
+    color: "#f8fafc",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  languagePicker: {
+    backgroundColor: "#1e293b",
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#334155",
+    maxHeight: 200,
+  },
+  languageOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#334155",
+  },
+  languageOptionSelected: {
+    backgroundColor: "#0f766e",
+  },
+  languageOptionText: {
+    color: "#f8fafc",
+    fontSize: 16,
   }
 });
-
-

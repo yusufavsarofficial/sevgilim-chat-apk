@@ -23,6 +23,8 @@ const consentSchema = z.object({
 const registerSchema = z.object({
   username: z.string().min(3).max(40),
   password: z.string().min(6).max(120),
+  securityQuestion: z.string().min(5).max(180),
+  securityAnswer: z.string().min(2).max(120),
   inviteKey: z.string().min(1),
   consents: consentSchema
 });
@@ -36,6 +38,21 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(16)
 });
 
+const forgotQuestionSchema = z.object({
+  username: z.string().min(3).max(40)
+});
+
+const forgotResetSchema = z.object({
+  username: z.string().min(3).max(40),
+  securityAnswer: z.string().min(2).max(120),
+  newPassword: z.string().min(6).max(120)
+});
+
+const deleteAccountSchema = z.object({
+  password: z.string().min(6).max(120),
+  securityAnswer: z.string().min(2).max(120)
+});
+
 type UserRow = {
   id: string;
   username: string;
@@ -45,6 +62,8 @@ type UserRow = {
   is_active: boolean;
   ban_reason: string | null;
   banned_until: string | null;
+  security_question: string | null;
+  security_answer_hash: string | null;
 };
 
 const accessLifetimeMs = parseDurationToMs(config.JWT_EXPIRES_IN, 15 * 60 * 1000);
@@ -218,8 +237,15 @@ authRouter.post("/register", async (req, res) => {
     `,
     [username, passwordHash]
   );
-
   const user = inserted[0];
+  await query(
+    `UPDATE users SET security_question = $2, security_answer_hash = $3 WHERE id = $1`,
+    [
+      user.id,
+      parsed.data.securityQuestion.trim(),
+      await bcrypt.hash(parsed.data.securityAnswer.trim().toLowerCase(), 10)
+    ]
+  );
   const session = await createSessionTokens({
     userId: user.id,
     username: user.username,
@@ -467,6 +493,50 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+authRouter.post("/forgot-password/question", async (req, res) => {
+  const parsed = forgotQuestionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "İstek geçersiz." });
+    return;
+  }
+  const username = normalizeUsername(parsed.data.username);
+  const rows = await query<{ security_question: string | null }>(
+    `SELECT security_question FROM users WHERE username = $1 AND role = 'USER' LIMIT 1`,
+    [username]
+  );
+  if (rows.length === 0 || !rows[0].security_question) {
+    res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    return;
+  }
+  res.json({ securityQuestion: rows[0].security_question });
+});
+
+authRouter.post("/forgot-password/reset", async (req, res) => {
+  const parsed = forgotResetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "İstek geçersiz." });
+    return;
+  }
+  const username = normalizeUsername(parsed.data.username);
+  const rows = await query<{ id: string; security_answer_hash: string | null }>(
+    `SELECT id, security_answer_hash FROM users WHERE username = $1 AND role = 'USER' LIMIT 1`,
+    [username]
+  );
+  if (rows.length === 0 || !rows[0].security_answer_hash) {
+    res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    return;
+  }
+  const answerOk = await bcrypt.compare(parsed.data.securityAnswer.trim().toLowerCase(), rows[0].security_answer_hash);
+  if (!answerOk) {
+    res.status(403).json({ error: "Güvenlik cevabı doğrulanamadı." });
+    return;
+  }
+  const newHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  await query(`UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`, [rows[0].id, newHash]);
+  await query(`UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, [rows[0].id]);
+  res.json({ success: true });
+});
+
 authRouter.get("/me", requireAuth, async (req, res) => {
   if (!req.auth) {
     res.status(401).json({ error: "Oturum doğrulanamadı." });
@@ -508,4 +578,57 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       bannedUntil: user.banned_until
     }
   });
+});
+
+authRouter.delete("/me", requireAuth, async (req, res) => {
+  if (!req.auth) {
+    res.status(401).json({ error: "Oturum doğrulanamadı." });
+    return;
+  }
+  const parsed = deleteAccountSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "İstek geçersiz." });
+    return;
+  }
+  const rows = await query<{
+    id: string;
+    role: "ADMIN" | "USER";
+    password_hash: string;
+    security_answer_hash: string | null;
+  }>(
+    `SELECT id, role, password_hash, security_answer_hash FROM users WHERE id = $1 LIMIT 1`,
+    [req.auth.userId]
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    return;
+  }
+  const user = rows[0];
+  if (user.role !== "USER") {
+    res.status(403).json({ error: "Yönetici hesabı silinemez." });
+    return;
+  }
+  const passOk = await bcrypt.compare(parsed.data.password, user.password_hash);
+  if (!passOk) {
+    res.status(403).json({ error: "Şifre doğrulanamadı." });
+    return;
+  }
+  if (!user.security_answer_hash) {
+    res.status(400).json({ error: "Güvenlik cevabı tanımlı değil." });
+    return;
+  }
+  const answerOk = await bcrypt.compare(parsed.data.securityAnswer.trim().toLowerCase(), user.security_answer_hash);
+  if (!answerOk) {
+    res.status(403).json({ error: "Güvenlik cevabı doğrulanamadı." });
+    return;
+  }
+  await query(`DELETE FROM users WHERE id = $1`, [user.id]);
+  await createAuditLog({
+    adminUserId: null,
+    action: "SELF_DELETE_ACCOUNT",
+    targetUserId: user.id,
+    ipAddress: req.clientIpAddress,
+    details: { sessionId: req.auth.sessionId }
+  });
+  res.json({ success: true });
 });

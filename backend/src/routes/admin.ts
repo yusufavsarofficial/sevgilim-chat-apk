@@ -1,5 +1,8 @@
 ﻿import bcrypt from "bcryptjs";
 import { Router } from "express";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { query } from "../db.js";
 import { createAuditLog } from "../utils/audit.js";
@@ -22,6 +25,47 @@ const updateUserSchema = z.object({
   password: z.string().min(6).max(120).optional(),
   role: z.enum(["USER", "ADMIN"]).optional()
 });
+const appUpdateSchema = z.object({
+  version: z.string().max(80).optional().default(""),
+  message: z.string().max(1000).optional().default(""),
+  apkUrl: z.string().max(1000).optional().default(""),
+  required: z.boolean().optional().default(false)
+});
+const apkUploadSchema = z.object({
+  fileName: z.string().min(1).max(180),
+  contentBase64: z.string().min(1),
+  version: z.string().max(80).optional().default(""),
+  message: z.string().max(1000).optional().default(""),
+  required: z.boolean().optional().default(false)
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDir = path.resolve(__dirname, "../../../uploads");
+
+function sanitizeApkFileName(fileName: string): string {
+  const base = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "-");
+  const withExtension = base.toLowerCase().endsWith(".apk") ? base : `${base}.apk`;
+  return `${Date.now()}-${withExtension}`;
+}
+
+async function saveAppUpdateSettings(value: {
+  version: string;
+  message: string;
+  apkUrl: string;
+  required: boolean;
+  fileName?: string;
+}) {
+  await query(
+    `
+      INSERT INTO admin_settings (key, value_json, updated_at)
+      VALUES ('app_update', $1::jsonb, NOW())
+      ON CONFLICT (key)
+      DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = NOW()
+    `,
+    [JSON.stringify({ ...value, updatedAt: new Date().toISOString() })]
+  );
+}
 
 function toUserDetail(row: {
   id: string;
@@ -54,6 +98,73 @@ function toUserDetail(row: {
 }
 
 export const adminRouter = Router();
+
+adminRouter.get("/app-update", async (_req, res) => {
+  const rows = await query<{ value_json: unknown; updated_at: string }>(
+    `SELECT value_json, updated_at FROM admin_settings WHERE key = 'app_update' LIMIT 1`
+  );
+  res.json({
+    update: rows[0]?.value_json ?? {
+      version: "",
+      message: "",
+      apkUrl: "",
+      required: false,
+      updatedAt: null
+    },
+    updatedAt: rows[0]?.updated_at ?? null
+  });
+});
+
+adminRouter.put("/app-update", async (req, res) => {
+  const parsed = appUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Güncelleme bilgileri geçersiz." });
+    return;
+  }
+
+  await saveAppUpdateSettings(parsed.data);
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "APP_UPDATE_SETTINGS_SAVE",
+    ipAddress: req.clientIpAddress,
+    details: parsed.data
+  });
+  res.json({ success: true, update: parsed.data });
+});
+
+adminRouter.post("/app-update/apk", async (req, res) => {
+  const parsed = apkUploadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "APK dosya bilgisi geçersiz." });
+    return;
+  }
+
+  const fileName = sanitizeApkFileName(parsed.data.fileName);
+  const content = Buffer.from(parsed.data.contentBase64, "base64");
+  if (content.length <= 0 || content.length > 120 * 1024 * 1024) {
+    res.status(400).json({ error: "APK dosyası boş veya çok büyük." });
+    return;
+  }
+
+  await mkdir(uploadsDir, { recursive: true });
+  await writeFile(path.join(uploadsDir, fileName), content);
+  const apkUrl = `/downloads/${fileName}`;
+  const update = {
+    version: parsed.data.version,
+    message: parsed.data.message,
+    apkUrl,
+    required: parsed.data.required,
+    fileName
+  };
+  await saveAppUpdateSettings(update);
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "APP_UPDATE_APK_UPLOAD",
+    ipAddress: req.clientIpAddress,
+    details: { fileName, sizeBytes: content.length, version: parsed.data.version }
+  });
+  res.status(201).json({ success: true, update });
+});
 
 adminRouter.get("/stats", async (_req, res) => {
   const counts = await query<{
@@ -134,6 +245,35 @@ adminRouter.get("/users", async (req, res) => {
   );
 
   res.json({ users: rows.map(toUserDetail) });
+});
+
+adminRouter.delete("/users", async (req, res) => {
+  const protectedRows = await query<{ user_count: string }>(
+    `SELECT COUNT(*)::text AS user_count FROM users WHERE role = 'ADMIN'`
+  );
+  const deletedRows = await query<{ id: string }>(
+    `
+      DELETE FROM users
+      WHERE role = 'USER'
+      RETURNING id
+    `
+  );
+
+  await createAuditLog({
+    adminUserId: req.auth?.userId ?? null,
+    action: "USER_PURGE_NON_ADMIN",
+    ipAddress: req.clientIpAddress,
+    details: {
+      deletedUsers: deletedRows.length,
+      protectedAdmins: Number(protectedRows[0]?.user_count ?? 0)
+    }
+  });
+
+  res.json({
+    success: true,
+    deletedUsers: deletedRows.length,
+    protectedAdmins: Number(protectedRows[0]?.user_count ?? 0)
+  });
 });
 
 adminRouter.post("/users", async (req, res) => {

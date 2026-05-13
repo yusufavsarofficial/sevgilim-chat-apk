@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "ใช่",
+    "no": "ไม่",
+    "ok": "ตกลง",
+    "cancel": "ยกเลิก",
+    "save": "บันทึก",
+    "delete": "ลบ",
+    "edit": "แก้ไข",
+    "add": "เพิ่ม",
+    "back": "กลับ",
+    "next": "ถัดไป",
+    "previous": "ก่อนหน้า",
+    "close": "ปิด",
+    "loading": "กำลังโหลด...",
+    "error": "ข้อผิดพลาด",
+    "success": "สำเร็จ",
+    "warning": "คำเตือน",
+    "info": "ข้อมูล"
+  },
+  "auth": {
+    "login": "เข้าสู่ระบบ",
+    "logout": "ออกจากระบบ",
+    "register": "ลงทะเบียน",
+    "username": "ชื่อผู้ใช้",
+    "password": "รหัสผ่าน",
+    "email": "อีเมล",
+    "forgotPassword": "ลืมรหัสผ่าน",
+    "loginWith": "เข้าสู่ระบบด้วย {{provider}}",
+    "selectLanguage": "เลือกภาษา",
+    "welcome": "ยินดีต้อนรับ"
+  },
+  "navigation": {
+    "home": "หน้าแรก",
+    "calendar": "ปฏิทิน",
+    "reports": "รายงาน",
+    "settings": "การตั้งค่า",
+    "profile": "โปรไฟล์"
+  },
+  "calendar": {
+    "today": "วันนี้",
+    "month": "เดือน",
+    "week": "สัปดาห์",
+    "day": "วัน",
+    "checkIn": "เช็คอิน",
+    "checkOut": "เช็คเอาท์",
+    "workedHours": "ชั่วโมงทำงาน",
+    "overtime": "ล่วงเวลา",
+    "break": "พัก"
+  },
+  "settings": {
+    "language": "ภาษา",
+    "theme": "ธีม",
+    "notifications": "การแจ้งเตือน",
+    "salary": "เงินเดือน",
+    "coefficients": "สัมประสิทธิ์",
+    "overtimeCoefficient": "สัมประสิทธิ์ล่วงเวลา",
+    "sundayCoefficient": "สัมประสิทธิ์วันอาทิตย์",
+    "ubgtCoefficient": "สัมประสิทธิ์ UBGT",
+    "holidayCoefficient": "สัมประสิทธิ์วันหยุด"
+  },
+  "reports": {
+    "monthlySummary": "สรุปประจำเดือน",
+    "totalHours": "ชั่วโมงทั้งหมด",
+    "totalEarnings": "รายได้ทั้งหมด",
+    "deductions": "การหัก",
+    "netSalary": "เงินเดือนสุทธิ"
+  },
+  "errors": {
+    "networkError": "ข้อผิดพลาดการเชื่อมต่อเครือข่าย",
+    "invalidCredentials": "ข้อมูลรับรองไม่ถูกต้อง",
+    "serverError": "ข้อผิดพลาดเซิร์ฟเวอร์",
+    "permissionDenied": "ถูกปฏิเสธการอนุญาต"
+  }
+}

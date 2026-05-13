@@ -18,6 +18,14 @@ const userDetail = document.getElementById("userDetail");
 const statTotal = document.getElementById("statTotal");
 const statActive = document.getElementById("statActive");
 const statBanned = document.getElementById("statBanned");
+const purgeStatus = document.getElementById("purgeStatus");
+const updateVersionInput = document.getElementById("updateVersionInput");
+const updateMessageInput = document.getElementById("updateMessageInput");
+const updateUrlInput = document.getElementById("updateUrlInput");
+const updateRequiredInput = document.getElementById("updateRequiredInput");
+const apkFileInput = document.getElementById("apkFileInput");
+const updateStatus = document.getElementById("updateStatus");
+const updateCurrent = document.getElementById("updateCurrent");
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -30,6 +38,10 @@ function escapeHtml(value) {
 
 function formatDate(value) {
   return value ? new Date(value).toLocaleString("tr-TR") : "-";
+}
+
+function formatShortDate(value) {
+  return value ? new Date(value).toLocaleDateString("tr-TR") : "-";
 }
 
 function setLoginStatus(message, isError = true) {
@@ -113,8 +125,10 @@ function renderUsers(users) {
       <td><strong>${escapeHtml(user.username)}</strong><br><span class="muted">${escapeHtml(user.id)}</span></td>
       <td>${escapeHtml(user.role)}</td>
       <td>${statusBadge(user)}</td>
-      <td>${formatDate(user.lastLoginAt)}</td>
+      <td>${formatShortDate(user.createdAt)}</td>
+      <td><strong>${formatDate(user.lastLoginAt)}</strong></td>
       <td>${escapeHtml(user.lastIp || "-")}<br><span class="muted">${escapeHtml(user.deviceInfo || "-")}</span></td>
+      <td>${Number(user.failedLoginCount || 0)}</td>
       <td><button data-user-id="${escapeHtml(user.id)}">Detay</button></td>
     `;
     tr.querySelector("button").addEventListener("click", () => openUserDetail(user.id));
@@ -183,8 +197,93 @@ async function loadIpBans() {
   renderIpBans(data.items || []);
 }
 
+function renderAppUpdate(update) {
+  const value = update || {};
+  updateVersionInput.value = value.version || "";
+  updateMessageInput.value = value.message || "";
+  updateUrlInput.value = value.apkUrl || "";
+  updateRequiredInput.checked = Boolean(value.required);
+  const link = value.apkUrl
+    ? `<a href="${escapeHtml(value.apkUrl)}" target="_blank" rel="noopener">APK indir / paylaş</a>`
+    : "-";
+  updateCurrent.innerHTML = `
+    <strong>Mevcut güncelleme</strong>
+    Sürüm: ${escapeHtml(value.version || "-")}<br>
+    Zorunlu: ${value.required ? "Evet" : "Hayır"}<br>
+    Dosya/URL: ${link}<br>
+    Mesaj: ${escapeHtml(value.message || "-")}<br>
+    Güncelleme: ${formatDate(value.updatedAt)}
+  `;
+}
+
+async function loadAppUpdate() {
+  const data = await api("/api/admin/app-update");
+  renderAppUpdate(data.update || {});
+}
+
+async function saveUpdateUrl() {
+  const payload = {
+    version: updateVersionInput.value.trim(),
+    message: updateMessageInput.value.trim(),
+    apkUrl: updateUrlInput.value.trim(),
+    required: updateRequiredInput.checked
+  };
+  updateStatus.textContent = "Güncelleme uyarısı kaydediliyor...";
+  updateStatus.style.color = "#64748b";
+  const data = await api("/api/admin/app-update", {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+  renderAppUpdate(data.update || payload);
+  updateStatus.textContent = "Güncelleme uyarısı kaydedildi.";
+  updateStatus.style.color = "#0f766e";
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      resolve(result.includes(",") ? result.split(",").pop() : result);
+    };
+    reader.onerror = () => reject(new Error("Dosya okunamadı."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadApkFile() {
+  const file = apkFileInput.files && apkFileInput.files[0];
+  if (!file) {
+    updateStatus.textContent = "Önce bir APK dosyası seç.";
+    updateStatus.style.color = "#b91c1c";
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith(".apk")) {
+    updateStatus.textContent = "Sadece .apk dosyası yüklenebilir.";
+    updateStatus.style.color = "#b91c1c";
+    return;
+  }
+  updateStatus.textContent = "APK okunuyor ve yükleniyor...";
+  updateStatus.style.color = "#64748b";
+  const contentBase64 = await readFileAsBase64(file);
+  const data = await api("/api/admin/app-update/apk", {
+    method: "POST",
+    body: JSON.stringify({
+      fileName: file.name,
+      contentBase64,
+      version: updateVersionInput.value.trim(),
+      message: updateMessageInput.value.trim(),
+      required: updateRequiredInput.checked
+    })
+  });
+  renderAppUpdate(data.update || {});
+  updateStatus.textContent = "APK yüklendi. İndirme/paylaşım linki hazır.";
+  updateStatus.style.color = "#0f766e";
+  apkFileInput.value = "";
+}
+
 async function loadDashboard() {
-  await Promise.all([loadStats(), loadUsers(), loadLogs(), loadIpBans()]);
+  await Promise.all([loadStats(), loadUsers(), loadLogs(), loadIpBans(), loadAppUpdate()]);
 }
 
 async function openUserDetail(userId) {
@@ -260,6 +359,24 @@ async function doDeleteUserData() {
   userDialog.close();
 }
 
+async function doPurgeUsers() {
+  const firstConfirm = confirm("Tüm normal kullanıcılar kalıcı olarak silinsin mi? Admin hesapları korunur.");
+  if (!firstConfirm) return;
+  const phrase = prompt('Devam etmek için "TEMIZLE" yazın.');
+  if (phrase !== "TEMIZLE") {
+    purgeStatus.textContent = "İşlem iptal edildi.";
+    purgeStatus.style.color = "#b45309";
+    return;
+  }
+  purgeStatus.textContent = "Kullanıcılar temizleniyor...";
+  purgeStatus.style.color = "#64748b";
+  const result = await api("/api/admin/users", { method: "DELETE" });
+  purgeStatus.textContent = `${result.deletedUsers || 0} kullanıcı silindi. ${result.protectedAdmins || 0} admin korundu.`;
+  purgeStatus.style.color = "#0f766e";
+  state.selectedUserId = null;
+  await loadDashboard();
+}
+
 async function doLogin() {
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
@@ -314,6 +431,30 @@ document.getElementById("logoutBtn").addEventListener("click", doLogout);
 document.getElementById("refreshUsersBtn").addEventListener("click", () => loadUsers());
 document.getElementById("searchBtn").addEventListener("click", () => loadUsers(document.getElementById("searchInput").value.trim()));
 document.getElementById("refreshLogsBtn").addEventListener("click", loadLogs);
+document.getElementById("loadUpdateBtn").addEventListener("click", () => {
+  loadAppUpdate().catch((error) => {
+    updateStatus.textContent = error.message || "Güncelleme bilgisi alınamadı.";
+    updateStatus.style.color = "#b91c1c";
+  });
+});
+document.getElementById("saveUpdateUrlBtn").addEventListener("click", () => {
+  saveUpdateUrl().catch((error) => {
+    updateStatus.textContent = error.message || "Güncelleme uyarısı kaydedilemedi.";
+    updateStatus.style.color = "#b91c1c";
+  });
+});
+document.getElementById("uploadApkBtn").addEventListener("click", () => {
+  uploadApkFile().catch((error) => {
+    updateStatus.textContent = error.message || "APK yüklenemedi.";
+    updateStatus.style.color = "#b91c1c";
+  });
+});
+document.getElementById("purgeUsersBtn").addEventListener("click", () => {
+  doPurgeUsers().catch((error) => {
+    purgeStatus.textContent = error.message || "Kullanıcı temizleme başarısız.";
+    purgeStatus.style.color = "#b91c1c";
+  });
+});
 document.getElementById("addIpBanBtn").addEventListener("click", async () => {
   const ipAddress = document.getElementById("ipBanInput").value.trim();
   const reason = document.getElementById("ipBanReasonInput").value.trim();

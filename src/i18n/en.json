@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "register": "Register",
+    "username": "Username",
+    "password": "Password",
+    "email": "Email",
+    "forgotPassword": "Forgot Password",
+    "loginWith": "Login with {{provider}}",
+    "selectLanguage": "Select Language",
+    "welcome": "Welcome"
+  },
+  "navigation": {
+    "home": "Home",
+    "calendar": "Calendar",
+    "reports": "Reports",
+    "settings": "Settings",
+    "profile": "Profile"
+  },
+  "calendar": {
+    "today": "Today",
+    "month": "Month",
+    "week": "Week",
+    "day": "Day",
+    "checkIn": "Check In",
+    "checkOut": "Check Out",
+    "workedHours": "Worked Hours",
+    "overtime": "Overtime",
+    "break": "Break"
+  },
+  "settings": {
+    "language": "Language",
+    "theme": "Theme",
+    "notifications": "Notifications",
+    "salary": "Salary",
+    "coefficients": "Coefficients",
+    "overtimeCoefficient": "Overtime Coefficient",
+    "sundayCoefficient": "Sunday Coefficient",
+    "ubgtCoefficient": "UBGT Coefficient",
+    "holidayCoefficient": "Holiday Coefficient"
+  },
+  "reports": {
+    "monthlySummary": "Monthly Summary",
+    "totalHours": "Total Hours",
+    "totalEarnings": "Total Earnings",
+    "deductions": "Deductions",
+    "netSalary": "Net Salary"
+  },
+  "errors": {
+    "networkError": "Network connection error",
+    "invalidCredentials": "Invalid credentials",
+    "serverError": "Server error",
+    "permissionDenied": "Permission denied"
+  }
+}

@@ -77,21 +77,26 @@ const settings = {
     records[key] = worked(key, 12);
   }
   const result = summary(records, settings);
-  assert.equal(result.dailyOvertimeHours, 90);
+  assert.equal(result.dailyOvertimeHours, 67.5);
   assert.equal(result.weeklyAdditionalOvertimeHours, 0);
   assert.equal(result.monthlyAdditionalOvertimeHours, 0);
-  assert.equal(result.overtimeHours, 90);
-  assert.equal(result.overtimePay, 16845);
+  assert.equal(result.overtimeHours, 67.5);
+  assert.equal(result.overtimePay, 12633.75);
 }
 
 {
   const sunday = summary({ "2026-05-03": worked("2026-05-03", 12) }, settings);
+  assert.equal(sunday.dailyOvertimeHours, 0);
+  assert.equal(sunday.overtimePay, 0);
+  assert.equal(sunday.sundayPay, 2246);
   assert.equal(sunday.mealTotal, 0);
   assert.equal(sunday.transportTotal, 0);
 }
 
 {
   const ubgt = summary({ "2026-05-01": worked("2026-05-01", 12) }, settings);
+  assert.equal(ubgt.dailyOvertimeHours, 0);
+  assert.equal(ubgt.overtimePay, 0);
   assert.equal(ubgt.mealTotal, 0);
   assert.equal(ubgt.transportTotal, 0);
 }
@@ -106,6 +111,10 @@ const settings = {
 assert.equal(tryParseNumber("7.5"), 7.5);
 assert.equal(tryParseNumber("7,5"), 7.5);
 assert.equal(tryParseNumber("28075.50"), 28075.5);
+assert.equal(tryParseNumber("28.075"), 28075);
+assert.equal(tryParseNumber("28.075,50"), 28075.5);
+assert.equal(tryParseNumber("28,075.50"), 28075.5);
+assert.equal(tryParseNumber("1.234.567"), 1234567);
 assert.equal(tryParseNumber("20:00"), 20);
 assert.equal(tryParseNumber("08:00"), 8);
 

@@ -3,6 +3,7 @@
   DayRecord,
   DayStatus,
   DayType,
+  LanguageCode,
   LegalResult,
   LegalSettings,
   MonthlyAnalytics,
@@ -10,6 +11,10 @@
   MonthPayment,
   MonthlySummary,
   PayrollSettings,
+  PaymentTransaction,
+  PayrollStatement,
+  SalaryHistoryEntry,
+  ShiftTemplate,
   ShiftRecord,
   ShiftType,
   TerminationType
@@ -41,6 +46,7 @@ const RELIGIOUS_HALF_HOLIDAYS_BY_YEAR: Record<number, string[]> = {
 };
 
 const WEEKDAY_LABELS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+const DEFAULT_SUNDAY_COEFFICIENT = 1.5;
 
 const RESIGNATION_TEMPLATE_TEXTS = {
   STANDARD: "Kendi isteğimle işten ayrılmak istiyorum.",
@@ -68,8 +74,9 @@ export const DEFAULT_SETTINGS: PayrollSettings = {
   dailyOvertimeThresholdHours: 7.5,
   coefficients: {
     overtime: 1.5,
-    sunday: 2.5,
-    holiday: 2
+    sunday: DEFAULT_SUNDAY_COEFFICIENT,
+    holiday: 2,
+    ubgt: 1
   },
   defaultShiftStart: "20:00",
   defaultShiftEnd: "08:00",
@@ -77,10 +84,26 @@ export const DEFAULT_SETTINGS: PayrollSettings = {
   defaultOvertimeHours: 4.5,
   monthlyMealAllowance: 9900,
   monthlyTransportAllowance: 3298,
+  nightPremiumRate: 0.25,
   mealTransportAccrualMethod: "WORKED_ONLY",
   salaryPaymentDay: 5,
   monthlyTarget: 0,
-  themePreference: "DARK"
+  themePreference: "DARK",
+  language: "tr",
+  personalGoals: {
+    dailyHours: 8,
+    weeklyHours: 40,
+    monthlyHours: 160,
+    enableNotifications: true
+  },
+  pomodoroSettings: {
+    workDuration: 25,
+    breakDuration: 5,
+    longBreakDuration: 15,
+    sessionsUntilLongBreak: 4
+  },
+  enableGamification: true,
+  enableOfflineMode: true
 };
 
 export const DEFAULT_MONTH_PAYMENT: MonthPayment = {
@@ -94,6 +117,32 @@ export const DEFAULT_MONTH_PAYMENT: MonthPayment = {
 
 export const DEFAULT_DATA: AppData = {
   settings: DEFAULT_SETTINGS,
+  salaryHistory: [],
+  paymentTransactions: [],
+  payrollStatements: [],
+  shiftTemplates: [
+    {
+      id: "template-day-8",
+      name: "Gündüz 8 saat",
+      start: "09:00",
+      end: "18:00",
+      breakMinutes: 60,
+      totalHours: 8,
+      manualOvertimeHours: 0,
+      note: ""
+    },
+    {
+      id: "template-night-12",
+      name: "Gece 12 saat",
+      start: "20:00",
+      end: "08:00",
+      breakMinutes: 0,
+      totalHours: 12,
+      manualOvertimeHours: 4.5,
+      note: "Gün aşan vardiya"
+    }
+  ],
+  evidenceFiles: [],
   dayRecords: {},
   paidByMonth: {},
   holidayDates: defaultHolidayDates(),
@@ -139,9 +188,98 @@ export const DEFAULT_DATA: AppData = {
     address: "",
     avatarUrl: ""
   },
+  employeePortal: {
+    iban: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    department: "",
+    position: "",
+    leaveBalanceDays: 14,
+    requests: [],
+    documents: [],
+    notifications: [
+      {
+        id: "welcome-employee-portal",
+        title: "Personel portalı hazır",
+        message: "Bordro, puantaj, izin, avans, mesai ve belge işlemlerini bu panelden takip edebilirsiniz.",
+        tone: "INFO",
+        read: false,
+        createdAt: new Date(0).toISOString()
+      }
+    ]
+  },
   shifts: [],
   activeSession: null
 };
+
+export function normalizeSalaryHistoryEntry(entry: Partial<SalaryHistoryEntry>, fallbackSettings = DEFAULT_SETTINGS): SalaryHistoryEntry {
+  const startMonth = isMonthKey(String(entry.startMonth ?? "")) ? String(entry.startMonth) : currentMonthKey();
+  const endMonth = isMonthKey(String(entry.endMonth ?? "")) ? String(entry.endMonth) : "";
+  return {
+    id: String(entry.id || `salary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    startMonth,
+    endMonth: endMonth && endMonth < startMonth ? "" : endMonth,
+    monthlySalary: safePositive(tryParseNumber(String(entry.monthlySalary ?? fallbackSettings.monthlySalary))),
+    monthlyBaseHours: safePositive(tryParseNumber(String(entry.monthlyBaseHours ?? fallbackSettings.monthlyBaseHours))) || 225,
+    weeklyOvertimeThresholdHours:
+      safePositive(tryParseNumber(String(entry.weeklyOvertimeThresholdHours ?? fallbackSettings.weeklyOvertimeThresholdHours))) || 45,
+    dailyOvertimeThresholdHours:
+      safePositive(tryParseNumber(String(entry.dailyOvertimeThresholdHours ?? fallbackSettings.dailyOvertimeThresholdHours))) || 7.5,
+    monthlyMealAllowance: safePositive(tryParseNumber(String(entry.monthlyMealAllowance ?? fallbackSettings.monthlyMealAllowance))),
+    monthlyTransportAllowance: safePositive(tryParseNumber(String(entry.monthlyTransportAllowance ?? fallbackSettings.monthlyTransportAllowance))),
+    coefficients: {
+      overtime: safePositive(tryParseNumber(String(entry.coefficients?.overtime ?? fallbackSettings.coefficients.overtime))) || 1.5,
+      sunday:
+        safePositive(tryParseNumber(String(entry.coefficients?.sunday ?? fallbackSettings.coefficients.sunday))) ||
+        DEFAULT_SUNDAY_COEFFICIENT,
+      holiday: safePositive(tryParseNumber(String(entry.coefficients?.holiday ?? fallbackSettings.coefficients.holiday))) || 2,
+      ubgt: safePositive(tryParseNumber(String(entry.coefficients?.ubgt ?? fallbackSettings.coefficients.ubgt))) || 1
+    },
+    note: String(entry.note ?? "")
+  };
+}
+
+export function normalizeSalaryHistory(
+  entries: Partial<SalaryHistoryEntry>[] | undefined,
+  fallbackSettings = DEFAULT_SETTINGS
+): SalaryHistoryEntry[] {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries
+    .map((entry) => normalizeSalaryHistoryEntry(entry, fallbackSettings))
+    .sort((a, b) => a.startMonth.localeCompare(b.startMonth));
+}
+
+export function resolvePayrollSettingsForMonth(
+  settings: PayrollSettings,
+  salaryHistory: SalaryHistoryEntry[] | undefined,
+  monthKey: string
+): PayrollSettings {
+  if (!isMonthKey(monthKey)) {
+    return settings;
+  }
+  const normalized = normalizeSalaryHistory(salaryHistory, settings);
+  const active = normalized
+    .filter((entry) => entry.startMonth <= monthKey && (!entry.endMonth || entry.endMonth >= monthKey))
+    .sort((a, b) => b.startMonth.localeCompare(a.startMonth))[0];
+  if (!active) {
+    return settings;
+  }
+  return {
+    ...settings,
+    monthlySalary: active.monthlySalary,
+    monthlyBaseHours: active.monthlyBaseHours,
+    weeklyOvertimeThresholdHours: active.weeklyOvertimeThresholdHours,
+    dailyOvertimeThresholdHours: active.dailyOvertimeThresholdHours,
+    monthlyMealAllowance: active.monthlyMealAllowance,
+    monthlyTransportAllowance: active.monthlyTransportAllowance,
+    coefficients: {
+      ...settings.coefficients,
+      ...active.coefficients
+    }
+  };
+}
 
 export function defaultHolidayDates(): string[] {
   const today = new Date();
@@ -186,7 +324,8 @@ export function safePositive(value: number): number {
 }
 
 export function tryParseNumber(value: string): number {
-  const timeMatch = value.trim().match(/^(\d{1,2}):([0-5]\d)$/);
+  const trimmed = value.trim();
+  const timeMatch = trimmed.match(/^(\d{1,2}):([0-5]\d)$/);
   if (timeMatch) {
     const hours = Number(timeMatch[1]);
     const minutes = Number(timeMatch[2]);
@@ -194,10 +333,42 @@ export function tryParseNumber(value: string): number {
     return Number.isFinite(parsedTime) ? parsedTime : 0;
   }
 
-  const normalized = value
+  const compact = trimmed
     .replace(/\s/g, "")
-    .replace(/[^\d,.-]/g, "")
-    .replace(",", ".");
+    .replace(/[^\d,.-]/g, "");
+
+  if (!compact || compact === "-" || compact === "." || compact === ",") {
+    return 0;
+  }
+
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  const separator = lastComma >= 0 || lastDot >= 0 ? (lastComma > lastDot ? "," : ".") : "";
+  let normalized = compact;
+
+  if (separator) {
+    const otherSeparator = separator === "," ? "." : ",";
+    const parts = compact.split(separator);
+    const decimalPart = parts[parts.length - 1] ?? "";
+    const integerPart = parts.slice(0, -1).join(separator);
+    const hasOtherSeparator = compact.includes(otherSeparator);
+    const singleSeparatorCount = parts.length - 1;
+    const groups = compact.replace(/^-/, "").split(separator);
+    const looksLikeThousandsOnly =
+      !hasOtherSeparator &&
+      singleSeparatorCount >= 1 &&
+      decimalPart.length === 3 &&
+      groups[0].length >= 1 &&
+      groups[0].length <= 3 &&
+      groups.slice(1).every((group) => group.length === 3);
+
+    if (looksLikeThousandsOnly) {
+      normalized = compact.replace(/[.,]/g, "");
+    } else {
+      normalized = `${integerPart.replace(/[.,]/g, "")}.${decimalPart}`;
+    }
+  }
+
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -262,28 +433,36 @@ export function formatDateToTr(value: Date): string {
   return `${day}.${month}.${year}`;
 }
 
-export function formatCurrency(value: number): string {
+function currencySpec(language: LanguageCode): { locale: string; currency: string; fallbackLabel: string } {
+  if (language === "th") {
+    return { locale: "th-TH", currency: "THB", fallbackLabel: "Baht" };
+  }
+  return { locale: "tr-TR", currency: "TRY", fallbackLabel: "TL" };
+}
+
+export function formatCurrency(value: number, language: LanguageCode = "tr"): string {
+  const spec = currencySpec(language);
   try {
-    return new Intl.NumberFormat("tr-TR", {
+    return new Intl.NumberFormat(spec.locale, {
       style: "currency",
-      currency: "TRY",
+      currency: spec.currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value);
   } catch {
-    return `${round2(value).toFixed(2)} TL`;
+    return `${round2(value).toFixed(2)} ${spec.fallbackLabel}`;
   }
 }
 
-export function formatSignedCurrency(value: number): string {
-  const absText = formatCurrency(Math.abs(value));
+export function formatSignedCurrency(value: number, language: LanguageCode = "tr"): string {
+  const absText = formatCurrency(Math.abs(value), language);
   if (value > 0) {
     return `+${absText}`;
   }
   if (value < 0) {
     return `-${absText}`;
   }
-  return `${formatCurrency(0)}`;
+  return `${formatCurrency(0, language)}`;
 }
 
 export function toMonthKey(date: Date): string {
@@ -572,13 +751,109 @@ export function normalizeMonthPayment(value: unknown): MonthPayment {
 
   const source = value as Partial<MonthPayment>;
   return {
-    salary: safePositive(source.salary ?? 0),
-    overtime: safePositive(source.overtime ?? 0),
-    sunday: safePositive(source.sunday ?? 0),
-    ubgt: safePositive(source.ubgt ?? 0),
-    meal: safePositive(source.meal ?? 0),
-    transport: safePositive(source.transport ?? 0)
+    salary: safePositive(tryParseNumber(String(source.salary ?? 0))),
+    overtime: safePositive(tryParseNumber(String(source.overtime ?? 0))),
+    sunday: safePositive(tryParseNumber(String(source.sunday ?? 0))),
+    ubgt: safePositive(tryParseNumber(String(source.ubgt ?? 0))),
+    meal: safePositive(tryParseNumber(String(source.meal ?? 0))),
+    transport: safePositive(tryParseNumber(String(source.transport ?? 0)))
   };
+}
+
+export function normalizePaymentTransactions(value: unknown): PaymentTransaction[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => {
+    const source = item as Partial<PaymentTransaction>;
+    return {
+      id: String(source.id || `payment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+      monthKey: isMonthKey(String(source.monthKey ?? "")) ? String(source.monthKey) : currentMonthKey(),
+      date: isIsoDate(String(source.date ?? "")) ? String(source.date) : toDateKey(new Date()),
+      kind: (source.kind as PaymentTransaction["kind"]) || "BANK",
+      amount: safePositive(tryParseNumber(String(source.amount ?? 0))),
+      description: String(source.description ?? "")
+    };
+  });
+}
+
+export function normalizePayrollStatements(value: unknown): PayrollStatement[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => {
+    const source = item as Partial<PayrollStatement>;
+    return {
+      id: String(source.id || `statement-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+      monthKey: isMonthKey(String(source.monthKey ?? "")) ? String(source.monthKey) : currentMonthKey(),
+      bordroNetSalary: safePositive(tryParseNumber(String(source.bordroNetSalary ?? 0))),
+      bordroOvertime: safePositive(tryParseNumber(String(source.bordroOvertime ?? 0))),
+      bordroSunday: safePositive(tryParseNumber(String(source.bordroSunday ?? 0))),
+      bordroUbgt: safePositive(tryParseNumber(String(source.bordroUbgt ?? 0))),
+      bordroMeal: safePositive(tryParseNumber(String(source.bordroMeal ?? 0))),
+      bordroTransport: safePositive(tryParseNumber(String(source.bordroTransport ?? 0))),
+      bankPaid: safePositive(tryParseNumber(String(source.bankPaid ?? 0))),
+      cashPaid: safePositive(tryParseNumber(String(source.cashPaid ?? 0))),
+      advanceDeduction: safePositive(tryParseNumber(String(source.advanceDeduction ?? 0))),
+      note: String(source.note ?? "")
+    };
+  });
+}
+
+export function normalizeShiftTemplates(value: unknown): ShiftTemplate[] {
+  const defaults = DEFAULT_DATA.shiftTemplates;
+  if (!Array.isArray(value)) {
+    return defaults;
+  }
+  const mapped = value.map((item) => {
+    const source = item as Partial<ShiftTemplate>;
+    return {
+      id: String(source.id || `template-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+      name: String(source.name || "Vardiya"),
+      start: String(source.start || DEFAULT_SETTINGS.defaultShiftStart),
+      end: String(source.end || DEFAULT_SETTINGS.defaultShiftEnd),
+      breakMinutes: safePositive(tryParseNumber(String(source.breakMinutes ?? 0))),
+      totalHours: safePositive(tryParseNumber(String(source.totalHours ?? DEFAULT_SETTINGS.defaultShiftHours))),
+      manualOvertimeHours: safePositive(tryParseNumber(String(source.manualOvertimeHours ?? 0))),
+      note: String(source.note ?? "")
+    };
+  });
+  return mapped.length ? mapped : defaults;
+}
+
+function parseClockMinutes(value: string): number | null {
+  const match = value.trim().match(/^(\d{1,2}):([0-5]\d)$/);
+  if (!match) {
+    return null;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || hours < 0 || hours > 23) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+export function calculateNightHours(start: string, end: string, totalHours: number): number {
+  const startMin = parseClockMinutes(start);
+  let endMin = parseClockMinutes(end);
+  if (startMin === null || endMin === null || totalHours <= 0) {
+    return 0;
+  }
+  if (endMin <= startMin) {
+    endMin += 24 * 60;
+  }
+  const intervals = [
+    [20 * 60, 24 * 60],
+    [24 * 60, 30 * 60]
+  ];
+  let nightMinutes = 0;
+  for (const [nightStart, nightEnd] of intervals) {
+    const overlapStart = Math.max(startMin, nightStart);
+    const overlapEnd = Math.min(endMin, nightEnd);
+    nightMinutes += Math.max(0, overlapEnd - overlapStart);
+  }
+  return round2(Math.min(totalHours, nightMinutes / 60));
 }
 
 function pad2(value: number): string {
@@ -655,7 +930,9 @@ export function calculateMonthlySummary(
   paidByMonth: Record<string, MonthPayment>,
   monthKey: string,
   holidayDates: string[],
-  halfHolidayDates: string[] = []
+  halfHolidayDates: string[] = [],
+  paymentTransactions: PaymentTransaction[] = [],
+  payrollStatements: PayrollStatement[] = []
 ): MonthlySummary {
   const monthDate = monthKeyToDate(monthKey);
   const salaryPeriod = monthDate
@@ -673,6 +950,16 @@ export function calculateMonthlySummary(
   if (!salaryPeriod || !overtimePeriod) {
     const paid = normalizeMonthPayment(paidByMonth[monthKey]);
     const paidTotal = paid.salary + paid.overtime + paid.sunday + paid.ubgt + paid.meal + paid.transport;
+    const transactionPaidTotal = normalizePaymentTransactions(paymentTransactions)
+      .filter((item) => item.monthKey === monthKey)
+      .reduce((sum, item) => sum + item.amount, 0);
+    const statementTotal = normalizePayrollStatements(payrollStatements)
+      .filter((item) => item.monthKey === monthKey)
+      .reduce(
+        (sum, item) =>
+          sum + item.bordroNetSalary + item.bordroOvertime + item.bordroSunday + item.bordroUbgt + item.bordroMeal + item.bordroTransport,
+        0
+      );
     return {
       monthKey,
       salaryPeriodStart: "",
@@ -711,6 +998,8 @@ export function calculateMonthlySummary(
       overtimePay: 0,
       sundayPay: 0,
       ubgtPay: 0,
+      nightHours: 0,
+      nightPremiumPay: 0,
       monthlyMealAllowance: 0,
       monthlyTransportAllowance: 0,
       mealEntitledDays: 0,
@@ -722,8 +1011,10 @@ export function calculateMonthlySummary(
       sideBenefitsTotal: 0,
       expectedTotal: 0,
       paid,
-      paidTotal: round2(paidTotal),
-      difference: round2(paidTotal)
+      transactionPaidTotal: round2(transactionPaidTotal),
+      statementTotal: round2(statementTotal),
+      paidTotal: round2(paidTotal + transactionPaidTotal),
+      difference: round2(paidTotal + transactionPaidTotal)
     };
   }
 
@@ -746,6 +1037,8 @@ export function calculateMonthlySummary(
   let dailyOvertimeHours = 0;
   let sundayHours = 0;
   let ubgtHours = 0;
+  let nightHours = 0;
+  let overtimeEligibleHours = 0;
   const weeklyHours = new Map<string, number>();
   const weeklyDailyOvertime = new Map<string, number>();
   const weeklyOvertimeThreshold = safePositive(settings.weeklyOvertimeThresholdHours || 45) || 45;
@@ -760,12 +1053,17 @@ export function calculateMonthlySummary(
     if (record.status === "WORKED") {
       workedDays += 1;
       const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
-      const dayOvertime = calculateDailyOvertimeHours(workHours, settings, record.work?.manualOvertimeOverrideHours);
-      const weekKey = weekKeyOf(dateKey);
+      const kind = dayTypeOf(dateKey, holidayDates, halfHolidayDates);
       totalHours += workHours;
-      dailyOvertimeHours += dayOvertime;
-      weeklyHours.set(weekKey, safePositive(weeklyHours.get(weekKey) ?? 0) + workHours);
-      weeklyDailyOvertime.set(weekKey, safePositive(weeklyDailyOvertime.get(weekKey) ?? 0) + dayOvertime);
+      nightHours += calculateNightHours(record.work?.start ?? settings.defaultShiftStart, record.work?.end ?? settings.defaultShiftEnd, workHours);
+      if (kind === "NORMAL") {
+        const dayOvertime = calculateDailyOvertimeHours(workHours, settings, record.work?.manualOvertimeOverrideHours);
+        const weekKey = weekKeyOf(dateKey);
+        overtimeEligibleHours += workHours;
+        dailyOvertimeHours += dayOvertime;
+        weeklyHours.set(weekKey, safePositive(weeklyHours.get(weekKey) ?? 0) + workHours);
+        weeklyDailyOvertime.set(weekKey, safePositive(weeklyDailyOvertime.get(weekKey) ?? 0) + dayOvertime);
+      }
       payableDays += 1;
       continue;
     }
@@ -823,7 +1121,7 @@ export function calculateMonthlySummary(
     weeklyOvertimeRawHours += raw;
     weeklyAdditionalOvertimeHours += Math.max(0, raw - countedDaily);
   }
-  const monthlyOvertimeRawHours = Math.max(0, totalHours - Math.max(1, monthlyBaseHours || 225));
+  const monthlyOvertimeRawHours = Math.max(0, overtimeEligibleHours - Math.max(1, monthlyBaseHours || 225));
   const monthlyAdditionalOvertimeHours = Math.max(
     0,
     monthlyOvertimeRawHours - dailyOvertimeHours - weeklyAdditionalOvertimeHours
@@ -836,7 +1134,8 @@ export function calculateMonthlySummary(
     ? overtimeHours * hourlyRate * safePositive(settings.coefficients.overtime)
     : 0;
   const sundayPay = salaryConfigured ? sundayHours * hourlyRate * safePositive(settings.coefficients.sunday) : 0;
-  const ubgtPay = salaryConfigured ? ubgtHours * hourlyRate * safePositive(settings.coefficients.holiday) : 0;
+  const ubgtPay = salaryConfigured ? ubgtHours * hourlyRate * safePositive(settings.coefficients.ubgt) : 0;
+  const nightPremiumPay = salaryConfigured ? nightHours * hourlyRate * safePositive(settings.nightPremiumRate) : 0;
 
   const monthlyMealAllowance = safePositive(settings.monthlyMealAllowance);
   const monthlyTransportAllowance = safePositive(settings.monthlyTransportAllowance);
@@ -865,9 +1164,20 @@ export function calculateMonthlySummary(
   const sideBenefitsTotal = mealTotal + transportTotal;
   const averageDailyOvertime = workedDays > 0 ? overtimeHours / workedDays : 0;
 
-  const expectedTotal = baseSalary + overtimePay + sundayPay + ubgtPay + sideBenefitsTotal;
+  const expectedTotal = baseSalary + overtimePay + sundayPay + ubgtPay + nightPremiumPay + sideBenefitsTotal;
   const paid = normalizeMonthPayment(paidByMonth[monthKey]);
-  const paidTotal = paid.salary + paid.overtime + paid.sunday + paid.ubgt + paid.meal + paid.transport;
+  const legacyPaidTotal = paid.salary + paid.overtime + paid.sunday + paid.ubgt + paid.meal + paid.transport;
+  const transactionPaidTotal = normalizePaymentTransactions(paymentTransactions)
+    .filter((item) => item.monthKey === monthKey)
+    .reduce((sum, item) => sum + item.amount, 0);
+  const statementTotal = normalizePayrollStatements(payrollStatements)
+    .filter((item) => item.monthKey === monthKey)
+    .reduce(
+      (sum, item) =>
+        sum + item.bordroNetSalary + item.bordroOvertime + item.bordroSunday + item.bordroUbgt + item.bordroMeal + item.bordroTransport,
+      0
+    );
+  const paidTotal = legacyPaidTotal + transactionPaidTotal;
   const difference = paidTotal - expectedTotal;
 
   return {
@@ -908,6 +1218,8 @@ export function calculateMonthlySummary(
     overtimePay: round2(overtimePay),
     sundayPay: round2(sundayPay),
     ubgtPay: round2(ubgtPay),
+    nightHours: round2(nightHours),
+    nightPremiumPay: round2(nightPremiumPay),
     monthlyMealAllowance: round2(monthlyMealAllowance),
     monthlyTransportAllowance: round2(monthlyTransportAllowance),
     mealEntitledDays,
@@ -926,6 +1238,8 @@ export function calculateMonthlySummary(
       meal: round2(paid.meal),
       transport: round2(paid.transport)
     },
+    transactionPaidTotal: round2(transactionPaidTotal),
+    statementTotal: round2(statementTotal),
     paidTotal: round2(paidTotal),
     difference: round2(difference)
   };
@@ -980,16 +1294,16 @@ export function calculateMonthlyAnalytics(
     }
 
     const workHours = safePositive(record.work?.totalHours ?? settings.defaultShiftHours);
+    const dayType = dayTypeOf(dateKey, holidayDates);
     const overHours = calculateDailyOvertimeHours(
       workHours,
       settings,
       record.work?.manualOvertimeOverrideHours
     );
-    const dayType = dayTypeOf(dateKey, holidayDates);
     const hourlyRate = safePositive(summary.hourlyRate);
-    const overtimePay = overHours * hourlyRate * safePositive(settings.coefficients.overtime);
+    const overtimePay = dayType === "NORMAL" ? overHours * hourlyRate * safePositive(settings.coefficients.overtime) : 0;
     const sundayPay = dayType === "SUNDAY" ? workHours * hourlyRate * safePositive(settings.coefficients.sunday) : 0;
-    const ubgtPay = dayType === "UBGT" ? workHours * hourlyRate * safePositive(settings.coefficients.holiday) : 0;
+    const ubgtPay = dayType === "UBGT" ? workHours * hourlyRate * safePositive(settings.coefficients.ubgt) : 0;
     const benefitPay =
       dayType === "NORMAL" ? safePositive(summary.mealDailyRate) + safePositive(summary.transportDailyRate) : 0;
     const dayTotal = overtimePay + sundayPay + ubgtPay + benefitPay;
@@ -1038,10 +1352,10 @@ export function calculateMonthlyAnalytics(
   };
 }
 
-export function monthlyDifferenceLabel(value: number): "EKSIK" | "FAZLA" | "ESIT" {
-  if (value < 0) return "EKSIK";
+export function monthlyDifferenceLabel(value: number): "EKSİK" | "FAZLA" | "EŞİT" {
+  if (value < 0) return "EKSİK";
   if (value > 0) return "FAZLA";
-  return "ESIT";
+  return "EŞİT";
 }
 
 export function differenceColor(value: number): string {
@@ -1061,6 +1375,14 @@ export function allMonthKeys(data: AppData): string[] {
   for (const monthKey of Object.keys(data.closedMonths)) {
     months.add(monthKey);
   }
+  for (const entry of data.salaryHistory ?? []) {
+    if (isMonthKey(entry.startMonth)) {
+      months.add(entry.startMonth);
+    }
+    if (isMonthKey(entry.endMonth)) {
+      months.add(entry.endMonth);
+    }
+  }
   months.add(currentMonthKey());
   return [...months].filter(isMonthKey).sort();
 }
@@ -1071,10 +1393,13 @@ export function totalDifferenceForAllMonths(data: AppData): number {
   for (const monthKey of months) {
     const summary = calculateMonthlySummary(
       data.dayRecords,
-      data.settings,
+      resolvePayrollSettingsForMonth(data.settings, data.salaryHistory, monthKey),
       data.paidByMonth,
       monthKey,
-      data.holidayDates
+      data.holidayDates,
+      data.halfHolidayDates,
+      data.paymentTransactions,
+      data.payrollStatements
     );
     total += summary.difference;
   }

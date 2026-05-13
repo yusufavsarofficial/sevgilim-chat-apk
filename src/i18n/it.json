@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "Sì",
+    "no": "No",
+    "ok": "OK",
+    "cancel": "Annulla",
+    "save": "Salva",
+    "delete": "Elimina",
+    "edit": "Modifica",
+    "add": "Aggiungi",
+    "back": "Indietro",
+    "next": "Avanti",
+    "previous": "Precedente",
+    "close": "Chiudi",
+    "loading": "Caricamento...",
+    "error": "Errore",
+    "success": "Successo",
+    "warning": "Avviso",
+    "info": "Informazione"
+  },
+  "auth": {
+    "login": "Accedi",
+    "logout": "Esci",
+    "register": "Registrati",
+    "username": "Nome utente",
+    "password": "Password",
+    "email": "Email",
+    "forgotPassword": "Password dimenticata",
+    "loginWith": "Accedi con {{provider}}",
+    "selectLanguage": "Seleziona lingua",
+    "welcome": "Benvenuto"
+  },
+  "navigation": {
+    "home": "Home",
+    "calendar": "Calendario",
+    "reports": "Rapporti",
+    "settings": "Impostazioni",
+    "profile": "Profilo"
+  },
+  "calendar": {
+    "today": "Oggi",
+    "month": "Mese",
+    "week": "Settimana",
+    "day": "Giorno",
+    "checkIn": "Check-in",
+    "checkOut": "Check-out",
+    "workedHours": "Ore lavorate",
+    "overtime": "Straordinario",
+    "break": "Pausa"
+  },
+  "settings": {
+    "language": "Lingua",
+    "theme": "Tema",
+    "notifications": "Notifiche",
+    "salary": "Stipendio",
+    "coefficients": "Coefficienti",
+    "overtimeCoefficient": "Coeff. straordinario",
+    "sundayCoefficient": "Coeff. domenica",
+    "ubgtCoefficient": "Coeff. UBGT",
+    "holidayCoefficient": "Coeff. vacanza"
+  },
+  "reports": {
+    "monthlySummary": "Riepilogo mensile",
+    "totalHours": "Ore totali",
+    "totalEarnings": "Guadagni totali",
+    "deductions": "Detrazioni",
+    "netSalary": "Stipendio netto"
+  },
+  "errors": {
+    "networkError": "Errore connessione di rete",
+    "invalidCredentials": "Credenziali non valide",
+    "serverError": "Errore server",
+    "permissionDenied": "Permesso negato"
+  }
+}

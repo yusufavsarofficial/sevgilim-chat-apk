@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "Evet",
+    "no": "Hayır",
+    "ok": "Tamam",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "add": "Ekle",
+    "back": "Geri",
+    "next": "İleri",
+    "previous": "Önceki",
+    "close": "Kapat",
+    "loading": "Yükleniyor...",
+    "error": "Hata",
+    "success": "Başarılı",
+    "warning": "Uyarı",
+    "info": "Bilgi"
+  },
+  "auth": {
+    "login": "Giriş",
+    "logout": "Çıkış",
+    "register": "Kayıt Ol",
+    "username": "Kullanıcı Adı",
+    "password": "Şifre",
+    "email": "E-posta",
+    "forgotPassword": "Şifremi Unuttum",
+    "loginWith": "{{provider}} ile Giriş",
+    "selectLanguage": "Dil Seçin",
+    "welcome": "Hoş Geldiniz"
+  },
+  "navigation": {
+    "home": "Ana Sayfa",
+    "calendar": "Takvim",
+    "reports": "Raporlar",
+    "settings": "Ayarlar",
+    "profile": "Profil"
+  },
+  "calendar": {
+    "today": "Bugün",
+    "month": "Ay",
+    "week": "Hafta",
+    "day": "Gün",
+    "checkIn": "Giriş",
+    "checkOut": "Çıkış",
+    "workedHours": "Çalışılan Saat",
+    "overtime": "Fazla Mesai",
+    "break": "Mola"
+  },
+  "settings": {
+    "language": "Dil",
+    "theme": "Tema",
+    "notifications": "Bildirimler",
+    "salary": "Maaş",
+    "coefficients": "Katsayılar",
+    "overtimeCoefficient": "Fazla Mesai Katsayısı",
+    "sundayCoefficient": "Pazar Katsayısı",
+    "ubgtCoefficient": "UBGT Katsayısı",
+    "holidayCoefficient": "Tatil Katsayısı"
+  },
+  "reports": {
+    "monthlySummary": "Aylık Özet",
+    "totalHours": "Toplam Saat",
+    "totalEarnings": "Toplam Kazanç",
+    "deductions": "Kesintiler",
+    "netSalary": "Net Maaş"
+  },
+  "errors": {
+    "networkError": "Ağ bağlantısı hatası",
+    "invalidCredentials": "Geçersiz kullanıcı bilgileri",
+    "serverError": "Sunucu hatası",
+    "permissionDenied": "İzin reddedildi"
+  }
+}

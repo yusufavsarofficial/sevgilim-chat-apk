@@ -37,10 +37,27 @@ export type Coefficients = {
   overtime: number;
   sunday: number;
   holiday: number;
+  ubgt: number;
 };
+
+export type LanguageCode = "tr" | "th";
 
 export type ThemePreference = "SYSTEM" | "LIGHT" | "DARK";
 export type MealTransportAccrualMethod = "WORKED_ONLY" | "WORKED_AND_ANNUAL" | "PAYABLE_ALL";
+
+export type PersonalGoals = {
+  dailyHours: number;
+  weeklyHours: number;
+  monthlyHours: number;
+  enableNotifications: boolean;
+};
+
+export type PomodoroSettings = {
+  workDuration: number; // dakika
+  breakDuration: number; // dakika
+  longBreakDuration: number; // dakika
+  sessionsUntilLongBreak: number;
+};
 
 export type PayrollSettings = {
   salaryMode: SalaryMode;
@@ -55,10 +72,30 @@ export type PayrollSettings = {
   defaultOvertimeHours: number;
   monthlyMealAllowance: number;
   monthlyTransportAllowance: number;
+  nightPremiumRate: number;
   mealTransportAccrualMethod: MealTransportAccrualMethod;
   salaryPaymentDay: number;
   monthlyTarget: number;
   themePreference: ThemePreference;
+  language: LanguageCode;
+  personalGoals: PersonalGoals;
+  pomodoroSettings: PomodoroSettings;
+  enableGamification: boolean;
+  enableOfflineMode: boolean;
+};
+
+export type SalaryHistoryEntry = {
+  id: string;
+  startMonth: string;
+  endMonth: string;
+  monthlySalary: number;
+  monthlyBaseHours: number;
+  weeklyOvertimeThresholdHours: number;
+  dailyOvertimeThresholdHours: number;
+  monthlyMealAllowance: number;
+  monthlyTransportAllowance: number;
+  coefficients: Coefficients;
+  note: string;
 };
 
 export type CloudConfig = {
@@ -94,6 +131,103 @@ export type MonthPayment = {
   ubgt: number;
   meal: number;
   transport: number;
+};
+
+export type PaymentKind = "BANK" | "CASH" | "ADVANCE" | "ACCOUNTANT" | "OTHER_PERSON" | "OTHER";
+
+export type PaymentTransaction = {
+  id: string;
+  monthKey: string;
+  date: string;
+  kind: PaymentKind;
+  amount: number;
+  description: string;
+};
+
+export type PayrollStatement = {
+  id: string;
+  monthKey: string;
+  bordroNetSalary: number;
+  bordroOvertime: number;
+  bordroSunday: number;
+  bordroUbgt: number;
+  bordroMeal: number;
+  bordroTransport: number;
+  bankPaid: number;
+  cashPaid: number;
+  advanceDeduction: number;
+  note: string;
+};
+
+export type ShiftTemplate = {
+  id: string;
+  name: string;
+  start: string;
+  end: string;
+  breakMinutes: number;
+  totalHours: number;
+  manualOvertimeHours: number;
+  note: string;
+};
+
+export type EvidenceFile = {
+  id: string;
+  monthKey: string;
+  title: string;
+  type: "BORDRO" | "DEKONT" | "WHATSAPP" | "VARDIYA" | "OTHER";
+  uri: string;
+  note: string;
+  createdAt: string;
+};
+
+export type EmployeeRequestType = "LEAVE" | "ADVANCE" | "OVERTIME" | "EXPENSE" | "PROFILE" | "OTHER";
+export type EmployeeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export type EmployeeRequest = {
+  id: string;
+  type: EmployeeRequestType;
+  status: EmployeeRequestStatus;
+  title: string;
+  startDate: string;
+  endDate: string;
+  amount: number;
+  hours: number;
+  note: string;
+  managerNote: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EmployeeDocumentType = "IDENTITY" | "IBAN" | "HEALTH" | "CONTRACT" | "CERTIFICATE" | "OTHER";
+
+export type EmployeeDocument = {
+  id: string;
+  title: string;
+  type: EmployeeDocumentType;
+  uri: string;
+  note: string;
+  createdAt: string;
+};
+
+export type EmployeeNotification = {
+  id: string;
+  title: string;
+  message: string;
+  tone: "INFO" | "SUCCESS" | "WARNING" | "DANGER";
+  read: boolean;
+  createdAt: string;
+};
+
+export type EmployeePortal = {
+  iban: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  department: string;
+  position: string;
+  leaveBalanceDays: number;
+  requests: EmployeeRequest[];
+  documents: EmployeeDocument[];
+  notifications: EmployeeNotification[];
 };
 
 export type TerminationType =
@@ -159,6 +293,11 @@ export type PersonalProfile = {
 
 export type AppData = {
   settings: PayrollSettings;
+  salaryHistory: SalaryHistoryEntry[];
+  paymentTransactions: PaymentTransaction[];
+  payrollStatements: PayrollStatement[];
+  shiftTemplates: ShiftTemplate[];
+  evidenceFiles: EvidenceFile[];
   dayRecords: Record<string, DayRecord>;
   paidByMonth: Record<string, MonthPayment>;
   holidayDates: string[];
@@ -167,6 +306,7 @@ export type AppData = {
   cloud: CloudConfig;
   legal: LegalSettings;
   profile: PersonalProfile;
+  employeePortal: EmployeePortal;
   // Legacy fields preserved for compatibility and migration
   shifts: ShiftRecord[];
   activeSession: ActiveSession | null;
@@ -210,6 +350,8 @@ export type MonthlySummary = {
   overtimePay: number;
   sundayPay: number;
   ubgtPay: number;
+  nightHours: number;
+  nightPremiumPay: number;
   monthlyMealAllowance: number;
   monthlyTransportAllowance: number;
   mealEntitledDays: number;
@@ -221,6 +363,8 @@ export type MonthlySummary = {
   sideBenefitsTotal: number;
   expectedTotal: number;
   paid: MonthPayment;
+  transactionPaidTotal: number;
+  statementTotal: number;
   paidTotal: number;
   difference: number;
 };

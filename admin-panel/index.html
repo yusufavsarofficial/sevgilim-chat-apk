@@ -43,6 +43,15 @@
         </article>
       </section>
 
+      <section class="card danger-zone">
+        <div>
+          <h3>Toplu Kullanıcı Temizleme</h3>
+          <p class="muted">Admin hesapları korunur; normal kullanıcılar ve bağlı oturum/puantaj verileri kalıcı olarak silinir.</p>
+          <p id="purgeStatus" class="status"></p>
+        </div>
+        <button id="purgeUsersBtn" class="danger">Tüm Normal Kullanıcıları Temizle</button>
+      </section>
+
       <section class="card">
         <div class="toolbar">
           <h3>Kullanıcılar</h3>
@@ -59,13 +68,44 @@
                 <th>Kullanıcı</th>
                 <th>Rol</th>
                 <th>Durum</th>
-                <th>Son Giriş</th>
-                <th>IP</th>
+                <th>Kayıt</th>
+                <th>Son Giriş Tarihi / Saati</th>
+                <th>IP / Cihaz</th>
+                <th>Hatalı Giriş</th>
                 <th>İşlem</th>
               </tr>
             </thead>
             <tbody id="usersBody"></tbody>
           </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="toolbar">
+          <h3>Güncelleme Uyarısı ve APK Paylaşımı</h3>
+          <button id="loadUpdateBtn">Bilgiyi Yenile</button>
+        </div>
+        <div class="update-grid">
+          <div>
+            <label>Sürüm</label>
+            <input id="updateVersionInput" placeholder="Örn: 1.0.1" />
+            <label>Güncelleme mesajı</label>
+            <textarea id="updateMessageInput" placeholder="Kullanıcılara gösterilecek açıklama"></textarea>
+            <label>APK URL</label>
+            <input id="updateUrlInput" placeholder="https://... veya /downloads/app.apk" />
+            <label class="checkbox-row">
+              <input id="updateRequiredInput" type="checkbox" />
+              <span>Zorunlu güncelleme</span>
+            </label>
+            <button id="saveUpdateUrlBtn">URL ile Güncelleme Uyarısını Kaydet</button>
+          </div>
+          <div>
+            <label>APK dosyası seç</label>
+            <input id="apkFileInput" type="file" accept=".apk,application/vnd.android.package-archive" />
+            <button id="uploadApkBtn">APK Dosyasını Yükle ve Paylaşıma Aç</button>
+            <p id="updateStatus" class="status"></p>
+            <div id="updateCurrent" class="detail-item">Henüz güncelleme bilgisi yüklenmedi.</div>
+          </div>
         </div>
       </section>
 

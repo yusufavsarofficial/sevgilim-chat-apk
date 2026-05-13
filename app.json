@@ -1,8 +1,8 @@
-﻿{
+{
   "expo": {
     "name": "Puantaj Maaş Hesap",
     "slug": "puantaj-maas-apk",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,23 +16,21 @@
     },
     "android": {
       "package": "com.yusuf.puantajmaashesap",
-      "versionCode": 4,
+      "versionCode": 10,
       "permissions": [
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"
       ],
-      "usesCleartextTraffic": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f766e"
       }
     },
-    "owner": "yusufav",
     "extra": {
-      "apiBaseUrl": "https://puantaj-maas-backend.onrender.com",
-      "eas": {
-        "projectId": "f4d47031-ec50-440b-ae8b-5e00fca98945"
-      }
-    }
+      "apiBaseUrl": "https://puantaj-maas-backend.onrender.com"
+    },
+    "plugins": [
+      "expo-sharing"
+    ]
   }
 }

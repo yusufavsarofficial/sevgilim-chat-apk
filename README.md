@@ -1,21 +1,21 @@
 # Puantaj Maas APK (Expo)
 
-Android icin puantaj + maas + mesai + eksik odeme + giris/cikis + konum kaydi uygulamasi.
+Android için puantaj + maaş + mesai + eksik ödeme + giriş/çıkış + konum kaydı uygulaması.
 
-## Ozellikler
-- Giris/cikis ile vardiya kaydi
-- Giris konumu ve cikis konumu kaydi
+## Özellikler
+- Giriş/çıkış ile vardiya kaydı
+- Giriş konumu ve çıkış konumu kaydı
 - Vardiya tipleri: `NORMAL`, `OVERTIME`, `SUNDAY`, `HOLIDAY`
-- Aylik ozet: saat, alacak, kesinti, hak edis, eksik/fazla odeme
-- Katsayi ayarlari degistirilebilir
-- Supabase ile online veri senkronu
+- Aylık özet: saat, alacak, kesinti, hak ediş, eksik/fazla ödeme
+- Katsayı ayarları değiştirilebilir
+- Supabase ile online veri senkronizasyonu
 
-## Resmi Katsayi Dayanaklari (Varsayilan)
-- Fazla mesai: `1.5x` (4857 Madde 41, saat ucretine `%50` artis)
-- Resmi tatilde calisma: varsayilan `2.0x` toplam etki (4857 Madde 47 + Madde 49 uygulamasi)
-- Pazar/hafta tatili: varsayilan `2.5x` (uygulamada sozlesme ve ictihada gore degisebilir, ayarlardan duzenlenebilir)
+## Resmî Katsayı Dayanakları (Varsayılan)
+- Fazla mesai: `1.5x` (4857 Madde 41, saat ücretine `%50` artış)
+- Resmî tatilde çalışma: varsayılan `2.0x` toplam etki (4857 Madde 47 + Madde 49 uygulaması)
+- Pazar/hafta tatili: varsayılan `2.5x` (uygulamada sözleşme ve içtihada göre değişebilir, ayarlardan düzenlenebilir)
 
-Not: Bordro tipi, toplu sozlesme ve sektor uygulamalari farkli olabildigi icin katsayilar Ayarlar ekranindan duzenlenebilir.
+Not: Bordro tipi, toplu sözleşme ve sektör uygulamaları farklı olabildiği için katsayılar Ayarlar ekranından düzenlenebilir.
 
 ## Kurulum
 1. Node.js ve npm kur.
@@ -37,7 +37,7 @@ npx eas build -p android --profile preview
 ## Supabase Online Kurulum
 `Bulut` sekmesinde `supabaseUrl`, `supabaseAnonKey`, `employeeCode` gir.
 
-Supabase SQL Editor'da tablo olustur:
+Supabase SQL Editor'da tablo oluştur:
 
 ```sql
 create table if not exists public.work_logs (
@@ -74,4 +74,4 @@ create policy "work_logs_update_all" on public.work_logs
 for update using (true) with check (true);
 ```
 
-Guvenlik notu: Uretimde `employee_code` veya auth tabanli RLS policy ile veri yetkilendirmesi yapman onerilir.
+Güvenlik notu: Üretimde `employee_code` veya auth tabanlı RLS policy ile veri yetkilendirmesi yapman önerilir.

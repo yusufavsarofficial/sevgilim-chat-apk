@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "بله",
+    "no": "نه",
+    "ok": "تأیید",
+    "cancel": "لغو",
+    "save": "ذخیره",
+    "delete": "حذف",
+    "edit": "ویرایش",
+    "add": "افزودن",
+    "back": "بازگشت",
+    "next": "بعدی",
+    "previous": "قبلی",
+    "close": "بستن",
+    "loading": "بارگذاری...",
+    "error": "خطا",
+    "success": "موفقیت",
+    "warning": "هشدار",
+    "info": "اطلاعات"
+  },
+  "auth": {
+    "login": "ورود",
+    "logout": "خروج",
+    "register": "ثبت نام",
+    "username": "نام کاربری",
+    "password": "رمز عبور",
+    "email": "ایمیل",
+    "forgotPassword": "رمز عبور را فراموش کرده‌ام",
+    "loginWith": "ورود با {{provider}}",
+    "selectLanguage": "انتخاب زبان",
+    "welcome": "خوش آمدید"
+  },
+  "navigation": {
+    "home": "خانه",
+    "calendar": "تقویم",
+    "reports": "گزارش‌ها",
+    "settings": "تنظیمات",
+    "profile": "پروفایل"
+  },
+  "calendar": {
+    "today": "امروز",
+    "month": "ماه",
+    "week": "هفته",
+    "day": "روز",
+    "checkIn": "ورود",
+    "checkOut": "خروج",
+    "workedHours": "ساعات کاری",
+    "overtime": "اضافه کاری",
+    "break": "استراحت"
+  },
+  "settings": {
+    "language": "زبان",
+    "theme": "تم",
+    "notifications": "اعلان‌ها",
+    "salary": "حقوق",
+    "coefficients": "ضرایب",
+    "overtimeCoefficient": "ضریب اضافه کاری",
+    "sundayCoefficient": "ضریب یکشنبه",
+    "ubgtCoefficient": "ضریب UBGT",
+    "holidayCoefficient": "ضریب تعطیلات"
+  },
+  "reports": {
+    "monthlySummary": "خلاصه ماهانه",
+    "totalHours": "کل ساعات",
+    "totalEarnings": "کل درآمد",
+    "deductions": "کسورات",
+    "netSalary": "حقوق خالص"
+  },
+  "errors": {
+    "networkError": "خطای اتصال شبکه",
+    "invalidCredentials": "اعتبارنامه نامعتبر",
+    "serverError": "خطای سرور",
+    "permissionDenied": "دسترسی رد شد"
+  }
+}

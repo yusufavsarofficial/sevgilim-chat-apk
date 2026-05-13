@@ -65,6 +65,7 @@ label {
 }
 
 input,
+textarea,
 button {
   width: 100%;
   border-radius: 10px;
@@ -74,7 +75,14 @@ button {
   font-size: 14px;
 }
 
-input:focus {
+textarea {
+  min-height: 104px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+input:focus,
+textarea:focus {
   outline: 3px solid rgba(15, 118, 110, 0.16);
   border-color: var(--accent);
 }
@@ -141,6 +149,20 @@ button.danger {
   font-weight: 900;
 }
 
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.danger-zone button {
+  width: auto;
+  min-width: 260px;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -167,7 +189,7 @@ button.danger {
 
 table {
   width: 100%;
-  min-width: 880px;
+  min-width: 1080px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -246,6 +268,28 @@ td button {
   gap: 14px;
 }
 
+.update-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  gap: 14px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: auto;
+  margin: 0;
+}
+
+.checkbox-row span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .detail-grid,
 .session-grid {
   display: grid;
@@ -313,6 +357,7 @@ dialog::backdrop {
 
   .stats-grid,
   .split-card,
+  .update-grid,
   .detail-grid,
   .session-grid {
     grid-template-columns: 1fr;
@@ -330,7 +375,13 @@ dialog::backdrop {
 
   .toolbar-right input,
   .toolbar-right button,
+  .danger-zone button,
   .panel-header button {
     width: 100%;
+  }
+
+  .danger-zone {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

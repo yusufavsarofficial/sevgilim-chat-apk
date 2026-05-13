@@ -1,0 +1,75 @@
+{
+  "common": {
+    "yes": "Erê",
+    "no": "Na",
+    "ok": "Temam",
+    "cancel": "Betal",
+    "save": "Tomar bike",
+    "delete": "Jê bibe",
+    "edit": "Biguherîne",
+    "add": "Zêde bike",
+    "back": "Paş",
+    "next": "Pêş",
+    "previous": "Paşîn",
+    "close": "Bigire",
+    "loading": "Tê barkirin...",
+    "error": "Çewtî",
+    "success": "Serkeftî",
+    "warning": "Hişyarî",
+    "info": "Agahdarî"
+  },
+  "auth": {
+    "login": "Têkeve",
+    "logout": "Derkeve",
+    "register": "Qeyd bike",
+    "username": "Navê bikarhêner",
+    "password": "Şîfre",
+    "email": "E-posta",
+    "forgotPassword": "Şîfre ji bîr kir",
+    "loginWith": "Bi {{provider}} têkeve",
+    "selectLanguage": "Ziman hilbijêre",
+    "welcome": "Bi xêr hatî"
+  },
+  "navigation": {
+    "home": "Mal",
+    "calendar": "Salname",
+    "reports": "Rapor",
+    "settings": "Mîheng",
+    "profile": "Profîl"
+  },
+  "calendar": {
+    "today": "Îro",
+    "month": "Meh",
+    "week": "Hefte",
+    "day": "Roj",
+    "checkIn": "Têkeve",
+    "checkOut": "Derkeve",
+    "workedHours": "Saetên xebatê",
+    "overtime": "Zêde xebat",
+    "break": "Bêhnvedan"
+  },
+  "settings": {
+    "language": "Ziman",
+    "theme": "Rûkar",
+    "notifications": "Agahdarî",
+    "salary": "Meaş",
+    "coefficients": "Katsayon",
+    "overtimeCoefficient": "Katsayona zêde xebatê",
+    "sundayCoefficient": "Katsayona yekşemê",
+    "ubgtCoefficient": "Katsayona UBGT",
+    "holidayCoefficient": "Katsayona betlaneyê"
+  },
+  "reports": {
+    "monthlySummary": "Kurteya mehane",
+    "totalHours": "Hemû saet",
+    "totalEarnings": "Hemû dahat",
+    "deductions": "Kêmkirin",
+    "netSalary": "Meaşa paqij"
+  },
+  "errors": {
+    "networkError": "Çewtiya girêdana torê",
+    "invalidCredentials": "Belgeyên nederbasdar",
+    "serverError": "Çewtiya serverê",
+    "permissionDenied": "Destûr hate red kirin"
+  }
+}
